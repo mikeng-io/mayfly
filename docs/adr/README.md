@@ -27,4 +27,10 @@ deliberately testing.
 
 | ADR | Title | Status |
 | --- | ----- | ------ |
-| [0001](0001-gateway-execution-model.md) | Gateway execution model on Lambda | Proposed |
+| [0001](../attic/adr-0001-gateway-execution-model.md) | Gateway execution model on Lambda | Archived — project pivoted to Mayfly |
+
+> The regional-egress ("Meridian") direction was abandoned after analysis showed it
+> couldn't be both serverless and a transparent proxy. The project pivoted to **Mayfly**
+> (ephemeral GitHub Actions runners on Lambda MicroVMs). The historical proxy work lives
+> under [`docs/attic/`](../attic/); the current design is in
+> [`docs/superpowers/specs/2026-07-07-mayfly-design.md`](../superpowers/specs/2026-07-07-mayfly-design.md).
