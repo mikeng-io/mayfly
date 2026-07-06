@@ -1,0 +1,196 @@
+<style>
+  :root{
+    --ground:#f8f7f5; --panel:#ffffff; --panel-2:#f1efec; --ink:#181410;
+    --muted:#63594e; --faint:#938a7e; --border:#e4dfd8; --border-strong:#cfc7bc;
+    --ember:#c2521c; --ember-bg:#f6e7dd;
+    --vpc:#2f6f6a; --vpc-bg:#d9ecea;
+    --win:#3c7a3c; --win-bg:#e0efe0;
+    --dead:#a23b34; --dead-bg:#f3e0de;
+    --shadow:0 1px 2px rgba(24,20,16,.05),0 10px 28px rgba(24,20,16,.06);
+    --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --ground:#12100e; --panel:#1b1815; --panel-2:#151310; --ink:#efe9e2;
+    --muted:#a99e91; --faint:#776d61; --border:#2a2621; --border-strong:#3a352e;
+    --ember:#e87a3c; --ember-bg:#2a1a10;
+    --vpc:#48b3aa; --vpc-bg:#0f2624;
+    --win:#5cb85c; --win-bg:#12240f;
+    --dead:#e08079; --dead-bg:#2a1512;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 14px 34px rgba(0,0,0,.4);
+  }}
+  :root[data-theme="light"]{
+    --ground:#f8f7f5; --panel:#ffffff; --panel-2:#f1efec; --ink:#181410; --muted:#63594e;
+    --faint:#938a7e; --border:#e4dfd8; --border-strong:#cfc7bc; --ember:#c2521c; --ember-bg:#f6e7dd;
+    --vpc:#2f6f6a; --vpc-bg:#d9ecea; --win:#3c7a3c; --win-bg:#e0efe0; --dead:#a23b34; --dead-bg:#f3e0de;
+    --shadow:0 1px 2px rgba(24,20,16,.05),0 10px 28px rgba(24,20,16,.06);
+  }
+  :root[data-theme="dark"]{
+    --ground:#12100e; --panel:#1b1815; --panel-2:#151310; --ink:#efe9e2; --muted:#a99e91;
+    --faint:#776d61; --border:#2a2621; --border-strong:#3a352e; --ember:#e87a3c; --ember-bg:#2a1a10;
+    --vpc:#48b3aa; --vpc-bg:#0f2624; --win:#5cb85c; --win-bg:#12240f; --dead:#e08079; --dead-bg:#2a1512;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 14px 34px rgba(0,0,0,.4);
+  }
+
+  *{box-sizing:border-box;}
+  body{margin:0;}
+  .page{background:var(--ground);color:var(--ink);font-family:var(--sans);line-height:1.55;
+    -webkit-font-smoothing:antialiased;padding:clamp(20px,5vw,60px) clamp(16px,5vw,48px) 80px;}
+  .wrap{max-width:1000px;margin:0 auto;}
+
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--ember);margin:0 0 12px;}
+  h1{font-size:clamp(34px,6vw,56px);line-height:1;letter-spacing:-.03em;font-weight:850;margin:0 0 8px;}
+  .tag{font-size:clamp(16px,2.4vw,20px);color:var(--muted);margin:0 0 20px;font-weight:500;}
+  .tag b{color:var(--ink);font-weight:660;}
+  .oneline{font-size:15px;color:var(--muted);max-width:66ch;margin:0 0 30px;border-left:3px solid var(--ember);padding-left:14px;}
+
+  h2{font-family:var(--mono);font-size:12px;letter-spacing:.11em;text-transform:uppercase;color:var(--faint);
+    font-weight:600;margin:0 0 16px;padding-bottom:9px;border-bottom:1px solid var(--border);}
+  section{margin-top:46px;}
+
+  /* journey */
+  .journey{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;}
+  .jstep{border:1px solid var(--border);border-radius:13px;background:var(--panel);padding:16px;box-shadow:var(--shadow);position:relative;}
+  .jstep .n{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin-bottom:8px;}
+  .jstep h3{margin:0 0 6px;font-size:15px;letter-spacing:-.01em;}
+  .jstep p{margin:0;font-size:13px;color:var(--muted);}
+  .jstep.dead{border-top:3px solid var(--dead);}
+  .jstep.dead h3{color:var(--dead);}
+  .jstep.turn{border-top:3px solid var(--faint);}
+  .jstep.land{border-top:3px solid var(--ember);}
+  .jstep.land h3{color:var(--ember);}
+
+  /* what */
+  .life{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;}
+  .lstep{flex:1 1 120px;border:1px solid var(--border);border-radius:10px;background:var(--panel-2);padding:11px 13px;}
+  .lstep .s{font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--ember);}
+  .lstep .t{font-weight:650;font-size:14px;margin-top:2px;}
+  .lstep .d{font-size:12px;color:var(--muted);margin-top:2px;}
+
+  /* table */
+  .tablewrap{overflow-x:auto;}
+  table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:520px;}
+  th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--border);}
+  th{font-family:var(--mono);font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--faint);font-weight:600;}
+  td.feat{color:var(--ink);font-weight:600;}
+  td.mf{background:var(--ember-bg);}
+  th.mf{background:var(--ember-bg);color:var(--ember);}
+  .yes{color:var(--win);font-weight:700;font-family:var(--mono);}
+  .no{color:var(--dead);font-weight:700;font-family:var(--mono);}
+  .meh{color:var(--faint);font-weight:700;font-family:var(--mono);}
+  .cell-note{color:var(--muted);font-size:12px;}
+
+  /* arch */
+  .arch{display:flex;flex-direction:column;gap:10px;}
+  .arow{display:grid;grid-template-columns:150px 1fr;gap:14px;align-items:baseline;border:1px solid var(--border);border-radius:11px;background:var(--panel);padding:13px 15px;}
+  .arow .k{font-family:var(--mono);font-size:11.5px;color:var(--ember);letter-spacing:.02em;text-transform:uppercase;}
+  .arow .v{font-size:14px;color:var(--muted);}
+  .arow .v b{color:var(--ink);font-weight:620;}
+  @media(max-width:640px){.arow{grid-template-columns:1fr;gap:4px;}}
+
+  .demo{margin-top:16px;padding:18px 20px;border-radius:13px;border:1px solid var(--vpc);background:var(--vpc-bg);}
+  .demo .lab{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--vpc);margin-bottom:6px;}
+  .demo p{margin:0;font-size:15px;color:var(--ink);}
+  .demo b{color:var(--vpc);}
+
+  .next{display:flex;flex-direction:column;gap:9px;}
+  .nrow{display:grid;grid-template-columns:20px 1fr;gap:11px;font-size:14px;color:var(--muted);}
+  .nrow .b{color:var(--ember);font-family:var(--mono);font-size:13px;}
+  .nrow b{color:var(--ink);font-weight:620;}
+
+  .foot{margin-top:48px;padding-top:16px;border-top:1px solid var(--border);font-family:var(--mono);font-size:12px;color:var(--faint);}
+
+  @media(max-width:720px){.journey{grid-template-columns:1fr;}}
+</style>
+
+<div class="page">
+  <div class="wrap">
+
+    <p class="eyebrow">Project summary &amp; conclusion · 2026-07-07</p>
+    <h1>Mayfly</h1>
+    <p class="tag"><b>Ephemeral GitHub Actions runners on AWS Lambda MicroVMs</b> — born, run one job, die.</p>
+    <p class="oneline">Each CI job resumes a warm, suspended MicroVM, registers just-in-time for a single job, reaches your <b>private</b> AWS resources through a policy-gated VPC connector, and is destroyed on completion. No standing fleet. Per-job VM isolation. Scale-to-zero.</p>
+
+    <section>
+      <h2>How we got here</h2>
+      <div class="journey">
+        <div class="jstep dead">
+          <div class="n">Started as</div>
+          <h3>A regional proxy</h3>
+          <p>"Meridian" — can a MicroVM be a Control-D-style regional egress gateway? Route selected traffic through a chosen region.</p>
+        </div>
+        <div class="jstep turn">
+          <div class="n">Hit a wall</div>
+          <h3>Serverless ✗ transparent</h3>
+          <p>A transparent proxy needs an always-on <b>L4</b> box. MicroVMs are <b>L7-only</b>; Lambda can't take a raw socket. So a serverless proxy can't exist — you'd just subscribe to Control D.</p>
+        </div>
+        <div class="jstep land">
+          <div class="n">Landed on</div>
+          <h3>Mayfly</h3>
+          <p>MicroVM's real strength is <b>isolated, stateful, VPC-connected compute</b>, not networking. The honest fit: ephemeral CI runners.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>What it is</h2>
+      <p style="margin:0 0 4px;font-size:15px;color:var(--muted);">The runner lifecycle, end to end:</p>
+      <div class="life">
+        <div class="lstep"><div class="s">warm</div><div class="t">Suspended</div><div class="d">Booted with toolchain, un-registered, ~zero cost.</div></div>
+        <div class="lstep"><div class="s">job queued</div><div class="t">Resume</div><div class="d">Wakes in ms; attaches its policy-scoped VPC access.</div></div>
+        <div class="lstep"><div class="s">JIT</div><div class="t">Register</div><div class="d">Fresh ephemeral runner token for this one job.</div></div>
+        <div class="lstep"><div class="s">isolated</div><div class="t">Run</div><div class="d">One job, in its own VM, with private reach.</div></div>
+        <div class="lstep"><div class="s">done</div><div class="t">Die + refill</div><div class="d">Terminated; a replacement is warmed to hold the pool.</div></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Why it wins</h2>
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr><th>Capability</th><th>GitHub-hosted</th><th>Self-hosted (EC2 / k8s)</th><th class="mf">Mayfly</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="feat">Private VPC access</td><td><span class="no">✗</span></td><td><span class="yes">✓</span></td><td class="mf"><span class="yes">✓</span></td></tr>
+            <tr><td class="feat">Per-job VM isolation</td><td><span class="yes">✓</span></td><td><span class="meh">~</span> <span class="cell-note">containers share a kernel</span></td><td class="mf"><span class="yes">✓</span></td></tr>
+            <tr><td class="feat">No standing fleet / scale-to-zero</td><td><span class="yes">✓</span></td><td><span class="no">✗</span></td><td class="mf"><span class="yes">✓</span></td></tr>
+            <tr><td class="feat">No infra to run (serverless)</td><td><span class="yes">✓</span></td><td><span class="no">✗</span></td><td class="mf"><span class="yes">✓</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="margin:14px 0 0;font-size:14px;color:var(--muted);">GitHub-hosted's one gap is <b style="color:var(--ink)">VPC access</b>; self-hosted's is the <b style="color:var(--ink)">standing fleet + ops</b>. Mayfly is the only column that has all four at once.</p>
+    </section>
+
+    <section>
+      <h2>Architecture at a glance</h2>
+      <div class="arch">
+        <div class="arow"><span class="k">Webhook</span><span class="v"><b>Lambda + Function URL</b> — verifies GitHub <code style="font-family:var(--mono)">workflow_job</code> events; enqueues provision / teardown.</span></div>
+        <div class="arow"><span class="k">Control plane</span><span class="v"><b>Lambda</b> — resume a MicroVM, inject a JIT ephemeral runner config, terminate + refill on completion.</span></div>
+        <div class="arow"><span class="k">Runner image</span><span class="v"><b>MicroVM</b> — Actions agent + toolchain baked in; JIT-registers on resume, runs one job.</span></div>
+        <div class="arow"><span class="k">Access policy</span><span class="v"><b>Governance pillar</b> — maps branch / trust-level → which VPC connector + SG (fork PRs: none). "Invisible fences" for CI.</span></div>
+        <div class="arow"><span class="k">State</span><span class="v"><b>DynamoDB</b> — pool + job↔VM mapping; the desired-vs-observed source of truth.</span></div>
+        <div class="arow"><span class="k">Reconciler</span><span class="v"><b>EventBridge Scheduler</b> — sweeps leaked VMs, refills the pool, enforces a max-runtime cap. The SRE backbone.</span></div>
+        <div class="arow"><span class="k">Everything</span><span class="v"><b>TypeScript + AWS CDK</b> — one toolchain, reproducible <code style="font-family:var(--mono)">cdk deploy</code>.</span></div>
+      </div>
+
+      <div class="demo">
+        <div class="lab">Headline demo</div>
+        <p>An ephemeral, isolated CI job <b>privately queries a VPC-only RDS</b> and succeeds — visibly something GitHub-hosted runners cannot do.</p>
+      </div>
+    </section>
+
+    <section>
+      <h2>Before we build — your call</h2>
+      <div class="next">
+        <div class="nrow"><span class="b">1</span><span><b>Repo strategy</b> — repurpose this repo (rename <code style="font-family:var(--mono)">meridian → mayfly</code>) or start fresh?</span></div>
+        <div class="nrow"><span class="b">2</span><span><b>Container builds</b> — must it build your Docker images (making the Docker-in-MicroVM spike load-bearing), or is the VPC-private-access demo enough for v1?</span></div>
+        <div class="nrow"><span class="b">3</span><span><b>Access policy location</b> — an in-repo policy file, or SSM?</span></div>
+      </div>
+      <p style="margin:18px 0 0;font-size:14px;color:var(--muted);">Spec: <code style="font-family:var(--mono)">docs/superpowers/specs/2026-07-07-mayfly-design.md</code>. Next step after your review: the implementation plan.</p>
+    </section>
+
+    <p class="foot">Mayfly · ephemeral CI runners on Lambda MicroVMs · design draft for review</p>
+
+  </div>
+</div>
