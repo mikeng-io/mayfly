@@ -1,0 +1,238 @@
+<style>
+  :root {
+    --ground:#f7f8fa; --panel:#ffffff; --panel-2:#f0f2f6; --ink:#10161f;
+    --muted:#5b6675; --faint:#8a94a3; --border:#dde2e8; --border-strong:#c4ccd6;
+    --direct:#5b6675; --direct-bg:#eef0f4;
+    --proxy:#14806f; --proxy-bg:#dcefeb;
+    --amber:#b5771f;
+    --leak:#b23b3b; --leak-bg:#f5e0df;
+    --mask:#2f7d55; --mask-bg:#dcefe3;
+    --shadow:0 1px 2px rgba(16,22,31,.06),0 8px 24px rgba(16,22,31,.05);
+    --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --ground:#0c1017; --panel:#131a24; --panel-2:#0f151d; --ink:#e6ebf2;
+    --muted:#97a2b2; --faint:#6b7686; --border:#222c39; --border-strong:#313d4d;
+    --direct:#97a2b2; --direct-bg:#171e28;
+    --proxy:#35b7a2; --proxy-bg:#10261f;
+    --amber:#e7a94a;
+    --leak:#e08585; --leak-bg:#2a1414;
+    --mask:#4bbd7e; --mask-bg:#10261a;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 12px 32px rgba(0,0,0,.35);
+  }}
+  :root[data-theme="light"]{
+    --ground:#f7f8fa; --panel:#ffffff; --panel-2:#f0f2f6; --ink:#10161f;
+    --muted:#5b6675; --faint:#8a94a3; --border:#dde2e8; --border-strong:#c4ccd6;
+    --direct:#5b6675; --direct-bg:#eef0f4; --proxy:#14806f; --proxy-bg:#dcefeb;
+    --amber:#b5771f; --leak:#b23b3b; --leak-bg:#f5e0df; --mask:#2f7d55; --mask-bg:#dcefe3;
+    --shadow:0 1px 2px rgba(16,22,31,.06),0 8px 24px rgba(16,22,31,.05);
+  }
+  :root[data-theme="dark"]{
+    --ground:#0c1017; --panel:#131a24; --panel-2:#0f151d; --ink:#e6ebf2;
+    --muted:#97a2b2; --faint:#6b7686; --border:#222c39; --border-strong:#313d4d;
+    --direct:#97a2b2; --direct-bg:#171e28; --proxy:#35b7a2; --proxy-bg:#10261f;
+    --amber:#e7a94a; --leak:#e08585; --leak-bg:#2a1414; --mask:#4bbd7e; --mask-bg:#10261a;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 12px 32px rgba(0,0,0,.35);
+  }
+
+  *{box-sizing:border-box;}
+  body{margin:0;}
+  .page{background:var(--ground);color:var(--ink);font-family:var(--sans);line-height:1.55;
+    -webkit-font-smoothing:antialiased;padding:clamp(20px,5vw,60px) clamp(16px,5vw,48px) 80px;}
+  .wrap{max-width:1040px;margin:0 auto;}
+
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);margin:0 0 10px;}
+  h1{font-size:clamp(26px,4.6vw,40px);line-height:1.06;letter-spacing:-.02em;font-weight:800;margin:0 0 14px;text-wrap:balance;}
+  .lede{font-size:clamp(16px,2.2vw,19px);color:var(--muted);max-width:64ch;margin:0 0 26px;}
+  .lede b{color:var(--ink);font-weight:640;}
+
+  .actors{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:8px;}
+  .actor{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12px;
+    padding:6px 11px;border-radius:8px;border:1px solid var(--border-strong);background:var(--panel);color:var(--muted);}
+  .actor b{color:var(--ink);font-weight:600;}
+  .dot{width:9px;height:9px;border-radius:50%;}
+  .dot.c{background:var(--amber);}
+  .dot.p{background:var(--proxy);}
+  .dot.s{background:var(--faint);}
+
+  .topic{margin-top:34px;}
+  .topic h2{font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);
+    font-weight:600;margin:0 0 14px;padding-bottom:9px;border-bottom:1px solid var(--border);}
+  .topic h2 span{color:var(--ink);}
+
+  .pair{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  .col{border:1px solid var(--border);border-radius:14px;background:var(--panel);box-shadow:var(--shadow);padding:18px;}
+  .col.direct{border-top:3px solid var(--direct);}
+  .col.proxied{border-top:3px solid var(--proxy);}
+  .col h3{margin:0 0 3px;font-size:15px;letter-spacing:-.01em;}
+  .col .sub{font-family:var(--mono);font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);margin-bottom:14px;}
+
+  .chain{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:14px;}
+  .pill{font-family:var(--mono);font-size:11.5px;padding:5px 9px;border-radius:7px;border:1px solid var(--border-strong);background:var(--panel-2);white-space:nowrap;}
+  .pill.c{border-color:var(--amber);color:var(--ink);}
+  .pill.p{border-color:var(--proxy);color:var(--ink);}
+  .pill.s{color:var(--muted);}
+  .conn{color:var(--faint);font-family:var(--mono);font-size:13px;}
+
+  .steps{list-style:none;margin:0 0 14px;padding:0;counter-reset:s;display:flex;flex-direction:column;gap:8px;}
+  .steps li{display:grid;grid-template-columns:20px 1fr;gap:10px;font-size:13.5px;color:var(--muted);}
+  .steps li::before{counter-increment:s;content:counter(s);font-family:var(--mono);font-size:12px;color:var(--proxy);padding-top:1px;}
+  .col.direct .steps li::before{color:var(--direct);}
+  .steps li b{color:var(--ink);font-weight:600;}
+  .steps code{font-family:var(--mono);font-size:12px;background:var(--panel-2);border:1px solid var(--border);border-radius:4px;padding:0 4px;color:var(--ink);}
+
+  .result{font-size:13px;padding:9px 12px;border-radius:9px;display:flex;gap:8px;align-items:baseline;}
+  .result.leak{background:var(--leak-bg);color:var(--leak);}
+  .result.mask{background:var(--mask-bg);color:var(--mask);}
+  .result.neutral{background:var(--panel-2);color:var(--muted);}
+  .result b{font-weight:700;}
+  .result .m{font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;flex:0 0 auto;padding-top:1px;}
+
+  .summary{margin-top:40px;display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  .scard{border:1px solid var(--border);border-radius:14px;background:var(--panel);padding:18px;box-shadow:var(--shadow);}
+  .scard h3{margin:0 0 12px;font-size:14px;}
+  .see{display:flex;flex-direction:column;gap:8px;}
+  .see div{display:grid;grid-template-columns:22px 1fr;gap:10px;font-size:13.5px;color:var(--muted);align-items:baseline;}
+  .see .y{color:var(--mask);font-weight:700;font-family:var(--mono);}
+  .see .n{color:var(--leak);font-weight:700;font-family:var(--mono);}
+  .see b{color:var(--ink);font-weight:600;}
+  .see code{font-family:var(--mono);font-size:12px;background:var(--panel-2);border:1px solid var(--border);border-radius:4px;padding:0 4px;color:var(--ink);}
+
+  .takeaway{margin-top:34px;padding:18px 20px;border-radius:14px;border:1px solid var(--border-strong);
+    background:var(--panel-2);font-size:15px;color:var(--ink);}
+  .takeaway b{color:var(--proxy);}
+
+  .foot{margin-top:44px;padding-top:16px;border-top:1px solid var(--border);font-family:var(--mono);font-size:12px;color:var(--faint);}
+
+  @media (max-width:760px){
+    .pair,.summary{grid-template-columns:1fr;}
+  }
+</style>
+
+<div class="page">
+  <div class="wrap">
+
+    <p class="eyebrow">Meridian · concept</p>
+    <h1>Direct vs. SNI-proxied: how the connection really flows</h1>
+    <p class="lede">Same request — <code style="font-family:var(--mono)">chat.openai.com</code> from Hong Kong — two ways. The proxy changes exactly <b>one thing that matters</b>: the IP the server sees. It does that by staying in the path and forwarding encrypted bytes it cannot read.</p>
+
+    <div class="actors">
+      <span class="actor"><span class="dot c"></span><b>Client</b>&nbsp;· Hong Kong</span>
+      <span class="actor"><span class="dot p"></span><b>SNI proxy</b>&nbsp;· Tokyo</span>
+      <span class="actor"><span class="dot s"></span><b>Server</b>&nbsp;· chat.openai.com</span>
+    </div>
+
+    <!-- HANDSHAKE -->
+    <div class="topic">
+      <h2>1 · <span>Handshake</span></h2>
+      <div class="pair">
+        <div class="col direct">
+          <h3>Direct</h3>
+          <div class="sub">non-proxied</div>
+          <div class="chain"><span class="pill c">Client·HK</span><span class="conn">──▶</span><span class="pill s">Server</span></div>
+          <ol class="steps">
+            <li>TCP connect straight to the server's <b>real IP</b> (DNS gave you the real answer).</li>
+            <li>Send <code>ClientHello</code> — <b>SNI:</b> chat.openai.com.</li>
+            <li>Server replies <code>ServerHello</code> + certificate.</li>
+            <li><b>TLS established directly</b>, client ↔ server.</li>
+          </ol>
+          <div class="result leak"><span class="m">result</span><span>One TCP connection. The server <b>already sees your HK IP</b>.</span></div>
+        </div>
+        <div class="col proxied">
+          <h3>Via SNI proxy</h3>
+          <div class="sub">Control&nbsp;D model</div>
+          <div class="chain"><span class="pill c">Client·HK</span><span class="conn">──▶</span><span class="pill p">Proxy·Tokyo</span><span class="conn">──▶</span><span class="pill s">Server</span></div>
+          <ol class="steps">
+            <li>TCP connect to the <b>proxy's IP</b> (DNS handed you the proxy, not the real host).</li>
+            <li>Send <code>ClientHello</code> — <b>SNI:</b> chat.openai.com.</li>
+            <li>Proxy <b>reads the SNI</b> (it's plaintext), opens its <b>own</b> TCP leg to the real server.</li>
+            <li>Handshake is <b>relayed end-to-end</b> — proxy pipes bytes, never decrypts.</li>
+          </ol>
+          <div class="result neutral"><span class="m">result</span><span>Two TCP legs stitched together. TLS is still <b>client ↔ server</b>; the proxy is blind.</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DATA TRANSFER -->
+    <div class="topic">
+      <h2>2 · <span>Data transfer</span></h2>
+      <div class="pair">
+        <div class="col direct">
+          <h3>Direct</h3>
+          <div class="sub">non-proxied</div>
+          <div class="chain"><span class="pill c">Client·HK</span><span class="conn">◀──▶</span><span class="pill s">Server</span></div>
+          <ol class="steps">
+            <li>Encrypted application bytes flow <b>straight</b> between client and server.</li>
+            <li>Nothing sits in between.</li>
+          </ol>
+          <div class="result leak"><span class="m">result</span><span>Every packet arrives from your <b>HK IP</b>.</span></div>
+        </div>
+        <div class="col proxied">
+          <h3>Via SNI proxy</h3>
+          <div class="sub">Control&nbsp;D model</div>
+          <div class="chain"><span class="pill c">Client·HK</span><span class="conn">◀──▶</span><span class="pill p">Proxy·Tokyo</span><span class="conn">◀──▶</span><span class="pill s">Server</span></div>
+          <ol class="steps">
+            <li><b>Every byte</b> flows through the proxy, both directions, for the <b>whole connection</b>.</li>
+            <li>It's a <b>blind pipe</b> — the proxy copies ciphertext it can't read.</li>
+          </ol>
+          <div class="result mask"><span class="m">result</span><span>The server sees the <b>proxy's Tokyo IP</b> — your IP is masked.</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- HTTP REQUEST -->
+    <div class="topic">
+      <h2>3 · <span>HTTP request</span></h2>
+      <div class="pair">
+        <div class="col direct">
+          <h3>Direct</h3>
+          <div class="sub">non-proxied</div>
+          <div class="chain"><span class="pill c">Client·HK</span><span class="conn">──▶</span><span class="pill s">Server</span></div>
+          <ol class="steps">
+            <li><code>GET /v1/…</code> travels <b>inside the TLS tunnel</b>, straight to the server.</li>
+            <li>The server decrypts and handles it.</li>
+          </ol>
+          <div class="result leak"><span class="m">result</span><span>Request arrives from <b>HK</b> → the geo rule is applied to <b>you</b>.</span></div>
+        </div>
+        <div class="col proxied">
+          <h3>Via SNI proxy</h3>
+          <div class="sub">Control&nbsp;D model</div>
+          <div class="chain"><span class="pill c">Client·HK</span><span class="conn">──▶</span><span class="pill p">Proxy·Tokyo</span><span class="conn">──▶</span><span class="pill s">Server</span></div>
+          <ol class="steps">
+            <li>The HTTP request is <b>inside TLS</b> — the proxy <b>cannot read it</b>, only forwards it.</li>
+            <li>The server decrypts it at the far end.</li>
+          </ol>
+          <div class="result mask"><span class="m">result</span><span>Request arrives from <b>Tokyo</b> → the geo rule is applied to <b>Tokyo</b>.</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SUMMARY -->
+    <div class="summary">
+      <div class="scard">
+        <h3>What the proxy can see</h3>
+        <div class="see">
+          <div><span class="y">✓</span><span><b>SNI hostname</b> — <code>chat.openai.com</code>, sent in plaintext in the ClientHello. This is all it needs to route.</span></div>
+          <div><span class="n">✗</span><span><b>The HTTP request / response</b> — encrypted end-to-end; the proxy never has the key.</span></div>
+          <div><span class="n">✗</span><span><b>Your data</b> — passwords, tokens, payloads. Ciphertext to the proxy.</span></div>
+        </div>
+      </div>
+      <div class="scard">
+        <h3>What the server sees</h3>
+        <div class="see">
+          <div><span class="n">✗</span><span><b>Direct:</b> your real <b>Hong Kong IP</b> — geo-block applies.</span></div>
+          <div><span class="y">✓</span><span><b>Proxied:</b> the proxy's <b>Tokyo IP</b> — geo-block sees Tokyo, not you.</span></div>
+          <div><span class="y">·</span><span>In both cases it still terminates <b>real TLS with the client</b> — the proxy is not a man-in-the-middle.</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="takeaway">
+      The proxy doesn't decrypt, doesn't understand HTTP, and doesn't change your request. It reads <b>one plaintext field (the SNI)</b> to decide where to forward, then stays in the path copying encrypted bytes. <b>DNS</b> only decides <em>whether</em> you go direct or through the proxy — the proxy does the actual work, and it's the reason the server sees Tokyo instead of Hong Kong.
+    </div>
+
+    <p class="foot">Meridian · Control D–style regional egress · docs/sni-proxy-comparison.html</p>
+
+  </div>
+</div>
