@@ -40,7 +40,9 @@ something GitHub-hosted runners cannot do.
 - Load-based autoscaling (fixed warm pool + reconciler refill only).
 - Org / multi-repo management; label routing beyond one runner label.
 - CI providers other than GitHub Actions (architecture leaves room; only GitHub built).
-- Container image builds inside the MicroVM **unless the spike proves it cheap** (stretch).
+- **Running Docker inside a job** (`docker build`/`run` as a CI step) — explicitly out of
+  v1. *(We still author a Dockerfile to* build *the runner MicroVM image — that's how
+  MicroVM images are made — but jobs themselves don't run Docker.)*
 - Cost dashboards, UI, multi-region.
 
 ## Users
@@ -59,8 +61,8 @@ All TypeScript; AWS CDK for IaC.
 3. **Runner MicroVM image** — Dockerfile-built image with the GitHub Actions runner agent
    + toolchain; boots to ready and is suspended *un-registered*; a lifecycle hook performs
    JIT registration on resume and runs one ephemeral job.
-4. **Access policy** — maps workflow / branch / trust-level → allowed VPC egress connector
-   + security group (which private resources this job may reach). Fork PRs default to none.
+4. **Runner network profile** — v1: a single security group that lets the runner reach the
+   demo's private resources. (Per-branch/trust policy engine is deferred — see Access policy.)
 5. **State** (DynamoDB) — pool inventory, job↔MicroVM mapping, lifecycle state; the
    desired-vs-observed source of truth.
 6. **Reconciler** (EventBridge Scheduler Lambda) — sweep orphaned/leaked MicroVMs, refill
@@ -73,8 +75,8 @@ All TypeScript; AWS CDK for IaC.
 1. **Warm pool:** N MicroVMs booted with runner + toolchain, then **suspended** (near-zero
    cost), NOT yet registered.
 2. `workflow_job: queued` → control plane picks a suspended VM, **resumes** it (ms),
-   resolves the job's access policy, attaches the matching VPC egress connector + SG,
-   mints a **JIT ephemeral runner config** from GitHub, injects it → runner takes that one job.
+   attaches the runner's VPC egress connector + security group, mints a **JIT ephemeral
+   runner config** from GitHub, injects it → runner takes that one job.
 3. Job runs in the isolated VM, with policy-scoped private access.
 4. `workflow_job: completed` (or ephemeral runner exits) → control plane **terminates** the
    VM, records it, **launches + suspends a replacement** to hold the pool at target.
@@ -83,14 +85,15 @@ All TypeScript; AWS CDK for IaC.
 **Fallback (Approach B)** if JIT-on-resume proves awkward: pure launch-per-job from the
 snapshot, no suspended pool. Still a valid showcase (snapshot launches are quick).
 
-## Access policy (governance pillar)
+## Access policy (v1: minimal; governance as a documented extension)
 
-- Policy config (in-repo file or SSM) maps trigger context (branch, event, fork vs
-  internal) → **network profile** (which VPC connector / SG, or none).
-- **Default deny:** fork-PR jobs get no VPC access. Trusted branches get a least-privilege
-  SG to declared resources (e.g., a dedicated test DB).
-- This is "invisible fences" for CI network access — the safety story for running untrusted
-  code with private reach.
+- **v1 (built):** the runner MicroVM gets a **single security group** granting access to the
+  demo's private resources (the VPC-only RDS). That's all the showcase needs — no policy
+  engine.
+- **Production hardening (documented, not built in v1):** a small policy — in-repo file or
+  SSM — mapping trigger context (branch, event, fork vs internal) → network profile (which
+  SG, or none), so fork-PR code gets no private access. This is the "invisible fences"
+  story; the write-up describes it, v1 doesn't implement the engine.
 
 ## SRE / operational design
 
@@ -114,8 +117,7 @@ snapshot, no suspended pool. Still a valid showcase (snapshot launches are quick
 ## Risks → resolve as the plan's first spikes (before building the pool)
 
 1. **JIT-config injection on resume** (crux of Approach C) — fallback B.
-2. **Container image builds inside a MicroVM** (dockerd or rootless kaniko/buildah) — gates
-   "usable for image-building CI"; else the demo stays non-container.
+2. *(Deferred — not a v1 gate)* Running Docker inside a job — future work.
 3. **MicroVM CDK construct level** (L1 vs Lambda-backed custom resource).
 4. **GitHub `workflow_job` webhook + JIT ephemeral registration** end to end.
 
@@ -129,6 +131,8 @@ snapshot, no suspended pool. Still a valid showcase (snapshot launches are quick
 
 ## Open questions
 
-- Repo strategy: repurpose this repo (rename `meridian` → `mayfly`) vs. a fresh repo.
-- Default warm-pool size and max-runtime cap values.
-- Where access policy lives (in-repo file vs SSM).
+**Resolved:** repo → rename `meridian` → `mayfly`; Docker-in-job → out of v1; access policy
+→ v1 uses a single security group (governance engine deferred).
+
+**Still open (sensible defaults chosen during planning):** warm-pool size and max-runtime
+cap values.
