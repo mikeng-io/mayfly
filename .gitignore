@@ -1,0 +1,51 @@
+# ---- Go ----
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+dist/
+# Test / coverage
+*.test
+*.out
+coverage.*
+# Go workspace
+go.work
+go.work.sum
+# Vendored deps (we use modules)
+vendor/
+
+# ---- Node / TypeScript / CDK ----
+node_modules/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+# CDK
+cdk.out/
+cdk.context.json
+*.d.ts
+!**/src/**/*.d.ts
+# Build output
+*.js.map
+lib/**/*.js
+# TypeScript incremental
+*.tsbuildinfo
+
+# ---- Tooling / local ----
+.env
+.env.*
+!.env.example
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# ---- Secrets / credentials (never commit) ----
+*.pem
+*.key
+aws-exports.js
+.aws/
