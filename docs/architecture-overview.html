@@ -1,0 +1,394 @@
+<style>
+  :root {
+    --ground: #f7f8fa;
+    --panel: #ffffff;
+    --panel-2: #f0f2f6;
+    --ink: #10161f;
+    --muted: #5b6675;
+    --faint: #8a94a3;
+    --border: #dde2e8;
+    --border-strong: #c4ccd6;
+    --control: #b5771f;   /* signal amber — control path */
+    --control-bg: #f6ecd9;
+    --data: #14806f;      /* region teal — data path */
+    --data-bg: #dcefeb;
+    --free: #2f7d55;      /* suspended = free */
+    --free-bg: #dcefe3;
+    --warn: #b23b3b;      /* limits / out of scope */
+    --warn-bg: #f5e0df;
+    --shadow: 0 1px 2px rgba(16,22,31,.06), 0 8px 24px rgba(16,22,31,.05);
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #0c1017;
+      --panel: #131a24;
+      --panel-2: #0f151d;
+      --ink: #e6ebf2;
+      --muted: #97a2b2;
+      --faint: #6b7686;
+      --border: #222c39;
+      --border-strong: #313d4d;
+      --control: #e7a94a;
+      --control-bg: #2a2113;
+      --data: #35b7a2;
+      --data-bg: #10261f;
+      --free: #4bbd7e;
+      --free-bg: #10261a;
+      --warn: #e08585;
+      --warn-bg: #2a1414;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 12px 32px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="light"] {
+    --ground: #f7f8fa; --panel: #ffffff; --panel-2: #f0f2f6; --ink: #10161f;
+    --muted: #5b6675; --faint: #8a94a3; --border: #dde2e8; --border-strong: #c4ccd6;
+    --control: #b5771f; --control-bg: #f6ecd9; --data: #14806f; --data-bg: #dcefeb;
+    --free: #2f7d55; --free-bg: #dcefe3; --warn: #b23b3b; --warn-bg: #f5e0df;
+    --shadow: 0 1px 2px rgba(16,22,31,.06), 0 8px 24px rgba(16,22,31,.05);
+  }
+  :root[data-theme="dark"] {
+    --ground: #0c1017; --panel: #131a24; --panel-2: #0f151d; --ink: #e6ebf2;
+    --muted: #97a2b2; --faint: #6b7686; --border: #222c39; --border-strong: #313d4d;
+    --control: #e7a94a; --control-bg: #2a2113; --data: #35b7a2; --data-bg: #10261f;
+    --free: #4bbd7e; --free-bg: #10261a; --warn: #e08585; --warn-bg: #2a1414;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 12px 32px rgba(0,0,0,.35);
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  .page {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    padding: clamp(20px, 5vw, 64px) clamp(16px, 5vw, 48px) 80px;
+  }
+  .wrap { max-width: 1000px; margin: 0 auto; }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--faint);
+    margin: 0 0 10px;
+  }
+  h1 {
+    font-size: clamp(30px, 5.5vw, 48px);
+    line-height: 1.04;
+    letter-spacing: -.02em;
+    font-weight: 800;
+    margin: 0 0 14px;
+    text-wrap: balance;
+  }
+  .lede {
+    font-size: clamp(17px, 2.4vw, 21px);
+    color: var(--muted);
+    max-width: 60ch;
+    margin: 0 0 22px;
+  }
+  .lede b { color: var(--ink); font-weight: 650; }
+
+  .meta { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 40px; }
+  .tag {
+    font-family: var(--mono); font-size: 12px; letter-spacing: .02em;
+    padding: 5px 10px; border-radius: 999px;
+    border: 1px solid var(--border-strong); color: var(--muted); background: var(--panel);
+  }
+  .tag b { color: var(--ink); font-weight: 600; }
+
+  section { margin-top: 52px; }
+  h2 {
+    font-size: 13px; font-family: var(--mono); letter-spacing: .1em; text-transform: uppercase;
+    color: var(--faint); font-weight: 600; margin: 0 0 18px;
+    padding-bottom: 10px; border-bottom: 1px solid var(--border);
+  }
+
+  /* ---- legend ---- */
+  .legend { display: flex; flex-wrap: wrap; gap: 18px; margin: 0 0 22px; font-size: 13px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 8px; }
+  .swatch { width: 22px; height: 3px; border-radius: 2px; display: inline-block; }
+  .swatch.control { background: var(--control); }
+  .swatch.data { background: var(--data); }
+  .swatch.direct { background: var(--faint); }
+
+  /* ---- schematic ---- */
+  .schematic { display: flex; flex-direction: column; gap: 0; }
+  .plane {
+    display: grid; grid-template-columns: 148px 1fr; gap: 18px;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 14px; padding: 18px; box-shadow: var(--shadow);
+  }
+  .plane-label { font-family: var(--mono); font-size: 12px; color: var(--faint); letter-spacing: .04em; }
+  .plane-label b { display: block; color: var(--ink); font-size: 13px; letter-spacing: .02em; margin-top: 4px; text-transform: uppercase; }
+  .nodes { display: flex; flex-wrap: wrap; gap: 12px; align-items: stretch; }
+  .node {
+    flex: 1 1 200px; min-width: 180px;
+    border: 1px solid var(--border-strong); border-radius: 10px;
+    background: var(--panel-2); padding: 12px 14px;
+  }
+  .node .svc { font-family: var(--mono); font-size: 11px; letter-spacing: .04em; color: var(--faint); text-transform: uppercase; }
+  .node .name { font-weight: 680; font-size: 15px; margin: 3px 0 4px; letter-spacing: -.01em; }
+  .node .role { font-size: 13px; color: var(--muted); line-height: 1.45; }
+  .node.control { border-left: 3px solid var(--control); }
+  .node.data { border-left: 3px solid var(--data); }
+
+  .connector {
+    display: flex; align-items: center; gap: 10px;
+    padding: 4px 0 4px 148px; margin: 0;
+  }
+  .connector .line { flex: 0 0 40px; height: 0; border-top: 2px dashed var(--control); position: relative; margin-left: 10px; }
+  .connector.dataflow .line { border-top-style: solid; border-top-color: var(--data); }
+  .connector .arrow { width: 0; height: 0; border-left: 7px solid var(--control); border-top: 5px solid transparent; border-bottom: 5px solid transparent; margin-left: -8px; }
+  .connector.dataflow .arrow { border-left-color: var(--data); }
+  .connector .clabel { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+
+  .branch {
+    margin: 10px 0 0; padding: 10px 14px; border-radius: 10px;
+    background: var(--panel-2); border: 1px dashed var(--border-strong);
+    font-size: 13px; color: var(--muted); display: flex; gap: 10px; align-items: baseline;
+  }
+  .branch b { color: var(--ink); font-weight: 620; }
+  .branch .mono { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); flex: 0 0 auto; }
+
+  .staterail {
+    grid-column: 1 / -1; margin-top: 4px; padding-top: 14px; border-top: 1px dashed var(--border);
+    display: flex; flex-wrap: wrap; gap: 12px;
+  }
+  .statechip { font-size: 13px; color: var(--muted); background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
+  .statechip b { color: var(--ink); font-family: var(--mono); font-size: 12px; }
+
+  /* ---- flow ---- */
+  .flow { display: flex; flex-direction: column; gap: 2px; counter-reset: step; }
+  .step { display: grid; grid-template-columns: 40px 1fr; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--border); }
+  .step:last-child { border-bottom: 0; }
+  .step .num { counter-increment: step; font-family: var(--mono); font-size: 13px; color: var(--control); font-weight: 600; padding-top: 2px; }
+  .step .num::before { content: counter(step, decimal-leading-zero); }
+  .step .body { font-size: 15px; }
+  .step .body b { font-weight: 660; }
+  .step .k { font-family: var(--mono); font-size: 12.5px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; color: var(--ink); }
+
+  /* ---- two paths ---- */
+  .paths { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .pathcard { border: 1px solid var(--border); border-radius: 12px; padding: 18px; background: var(--panel); box-shadow: var(--shadow); }
+  .pathcard.match { border-top: 3px solid var(--data); }
+  .pathcard.direct { border-top: 3px solid var(--faint); }
+  .pathcard h3 { margin: 0 0 4px; font-size: 16px; letter-spacing: -.01em; }
+  .pathcard .tagline { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); margin-bottom: 10px; }
+  .pathcard p { margin: 0; font-size: 14px; color: var(--muted); }
+  .pathcard code { font-family: var(--mono); font-size: 12.5px; color: var(--ink); background: var(--panel-2); padding: 1px 5px; border-radius: 4px; }
+
+  /* ---- lifecycle ---- */
+  .life { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; }
+  .lstate { flex: 1 1 130px; border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; background: var(--panel); }
+  .lstate .s { font-family: var(--mono); font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--faint); }
+  .lstate .t { font-weight: 660; margin: 3px 0; font-size: 14.5px; }
+  .lstate .d { font-size: 12.5px; color: var(--muted); }
+  .lstate.free { background: var(--free-bg); border-color: color-mix(in srgb, var(--free) 40%, var(--border)); }
+  .lstate.free .t { color: var(--free); }
+  .lstate .arrow-in { color: var(--faint); }
+
+  /* ---- decisions & limits ---- */
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .stack { display: flex; flex-direction: column; gap: 10px; }
+  .row { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: baseline; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); }
+  .row .m { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--data); white-space: nowrap; padding-top: 2px; }
+  .row.warn .m { color: var(--warn); }
+  .row .txt { font-size: 14px; color: var(--muted); }
+  .row .txt b { color: var(--ink); font-weight: 640; }
+  .card-hd { font-size: 14px; font-weight: 700; margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
+  .card-hd.warn { color: var(--warn); }
+  .card-hd.ok { color: var(--data); }
+
+  .foot { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--border); font-size: 12.5px; color: var(--faint); font-family: var(--mono); letter-spacing: .02em; }
+
+  a:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--data); outline-offset: 3px; border-radius: 4px; }
+
+  @media (max-width: 720px) {
+    .plane { grid-template-columns: 1fr; gap: 12px; }
+    .connector { padding-left: 8px; }
+    .staterail { grid-column: auto; }
+    .paths, .cols { grid-template-columns: 1fr; }
+    .step { grid-template-columns: 32px 1fr; gap: 12px; }
+  }
+</style>
+
+<div class="page">
+  <div class="wrap">
+
+    <p class="eyebrow">Meridian · architecture &amp; flow · as of 2026-07-07</p>
+    <h1>Ephemeral regional egress on Lambda MicroVMs</h1>
+    <p class="lede">A developer routes <b>only policy-matched</b> API calls through a chosen AWS region, leaving from a <b>stable, allowlistable IP</b>. Everything else goes direct. The gateway is disposable — <b>the session lives as intent in DynamoDB, never as a held connection.</b></p>
+
+    <div class="meta">
+      <span class="tag"><b>Use case:</b>&nbsp;individual developer</span>
+      <span class="tag"><b>Trust:</b>&nbsp;single domain</span>
+      <span class="tag"><b>Model:</b>&nbsp;C′ (agent + MicroVM + control edge)</span>
+      <span class="tag"><b>Status:</b>&nbsp;design settled · build not started</span>
+    </div>
+
+    <section aria-labelledby="arch">
+      <h2 id="arch">The system, top to bottom</h2>
+      <div class="legend">
+        <span><i class="swatch control"></i> control path — discover &amp; launch</span>
+        <span><i class="swatch data"></i> data path — tunneled bytes</span>
+        <span><i class="swatch direct"></i> direct — never touches AWS</span>
+      </div>
+
+      <div class="schematic">
+
+        <div class="plane">
+          <div class="plane-label">on-device<b>Your machine</b></div>
+          <div>
+            <div class="nodes">
+              <div class="node">
+                <div class="svc">Go · local proxy</div>
+                <div class="name">Meridian agent</div>
+                <div class="role">SOCKS5 / HTTPS proxy. Reads a TOML policy, matches each outbound flow, and splits: matched → tunnel, else → direct.</div>
+              </div>
+              <div class="node">
+                <div class="svc">any client</div>
+                <div class="name">Dev app / SDK / curl</div>
+                <div class="role">Points its proxy at the agent. Unaware of regions or gateways.</div>
+              </div>
+            </div>
+            <div class="branch">
+              <span class="mono">direct →</span>
+              <span><b>Unmatched traffic</b> (GitHub, internal services, everything else) leaves the machine straight to the internet. Meridian never sees it — this is what keeps it a selective gateway, not a VPN.</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="connector"><span class="line"></span><span class="arrow"></span><span class="clabel">resolve — where do I connect?</span></div>
+
+        <div class="plane">
+          <div class="plane-label">edge · global<b>Discovery</b></div>
+          <div class="nodes">
+            <div class="node control">
+              <div class="svc">CloudFront + Function</div>
+              <div class="name">Discovery domain</div>
+              <div class="role">One stable anycast name — the only thing the agent is configured with. A CloudFront Function validates the token, picks the region from viewer-geo, and looks up the endpoint in KeyValueStore.</div>
+            </div>
+            <div class="node control">
+              <div class="svc">KeyValueStore</div>
+              <div class="name">Edge routing cache</div>
+              <div class="role">Hit → return the endpoint at the edge (sub-ms). Miss → fall through to the origin. Eventually consistent; DynamoDB stays authoritative.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="connector"><span class="line"></span><span class="arrow"></span><span class="clabel">cache miss / cold session</span></div>
+
+        <div class="plane">
+          <div class="plane-label">origin · regional<b>Control edge</b></div>
+          <div>
+            <div class="nodes">
+              <div class="node control">
+                <div class="svc">Go · Lambda</div>
+                <div class="name">Resolve-or-launch</div>
+                <div class="role">Resolves the region (substituting if a named region isn't GA), calls <span class="k" style="font-family:var(--mono)">run-microvm</span> when none exists, mints a scoped JWE, writes intent, and returns <code style="font-family:var(--mono)">{endpoint, credential}</code>.</div>
+              </div>
+            </div>
+            <div class="staterail">
+              <span class="statechip"><b>DynamoDB</b> — session intent: region, policy ref, epoch, lifecycle state <em>(never a connection)</em></span>
+              <span class="statechip"><b>SSM</b> — config: enabled regions, substitution map, TTLs, policy version</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="connector dataflow"><span class="line"></span><span class="arrow"></span><span class="clabel">tunnel — HTTP/2 CONNECT, one per matched flow</span></div>
+
+        <div class="plane">
+          <div class="plane-label">data plane · Tokyo<b>Regional gateway</b></div>
+          <div class="nodes">
+            <div class="node data">
+              <div class="svc">Lambda MicroVM</div>
+              <div class="name">Egress appliance</div>
+              <div class="role">Terminates the tunnel (WS/gRPC/HTTP2), <b>re-validates</b> the destination against baked-in policy (the agent is untrusted), then dials the target. One per (user, active region). Suspends when idle.</div>
+            </div>
+            <div class="node data">
+              <div class="svc">NAT GW + Elastic IP</div>
+              <div class="name">Stable egress IP</div>
+              <div class="role">The whole point: the call reaches the target from a fixed, allowlistable regional address.</div>
+            </div>
+            <div class="node data">
+              <div class="svc">upstream</div>
+              <div class="name">Target API</div>
+              <div class="role">Sees a request originating in the chosen region, from a known IP.</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <section aria-labelledby="flow">
+      <h2 id="flow">A matched request, cold start</h2>
+      <div class="flow">
+        <div class="step"><span class="num"></span><div class="body">Your app makes a call to <span class="k">api.example.com</span>. The agent matches it against the policy → <b>route to region R</b>.</div></div>
+        <div class="step"><span class="num"></span><div class="body">Agent calls the CloudFront <b>discovery</b> domain. The edge function validates the token and checks KeyValueStore — <b>miss</b> (no gateway yet), so it forwards to the origin.</div></div>
+        <div class="step"><span class="num"></span><div class="body">The <b>control edge</b> resolves the region (substituting if R isn't a GA region), sees no live MicroVM, and calls <span class="k">run-microvm</span>.</div></div>
+        <div class="step"><span class="num"></span><div class="body">It mints a scoped <b>JWE credential</b>, writes the <b>session intent</b> to DynamoDB, write-throughs the endpoint to KeyValueStore, and returns <span class="k">{endpoint, credential}</span>.</div></div>
+        <div class="step"><span class="num"></span><div class="body">Agent opens an <b>HTTP/2 CONNECT</b> stream to the MicroVM endpoint (credential attached) and keeps the tunnel warm for later flows.</div></div>
+        <div class="step"><span class="num"></span><div class="body">The MicroVM <b>re-validates</b> the destination against its baked-in policy, then dials the target — egressing through the <b>NAT gateway's Elastic IP</b>.</div></div>
+        <div class="step"><span class="num"></span><div class="body">Bytes relay back through the tunnel. The next matched flow reuses the warm tunnel; the next lookup is now a <b>KeyValueStore hit</b> at the edge.</div></div>
+      </div>
+    </section>
+
+    <section aria-labelledby="split">
+      <h2 id="split">Two paths, one policy</h2>
+      <div class="paths">
+        <div class="pathcard match">
+          <h3>Matched destinations</h3>
+          <div class="tagline">tunnel → region → stable IP</div>
+          <p>Rules like <code>match "api.x" → gateway region</code> send the flow through the agent's tunnel to a regional MicroVM, out a fixed IP. This is the minority of traffic.</p>
+        </div>
+        <div class="pathcard direct">
+          <h3>Everything else</h3>
+          <div class="tagline">direct → internet</div>
+          <p>Rules like <code>match "*.github.com" → direct</code> — and the default — leave the machine normally. Meridian never sees them, so it cannot become a full tunnel.</p>
+        </div>
+      </div>
+    </section>
+
+    <section aria-labelledby="life">
+      <h2 id="life">Gateway lifecycle — the compute is disposable</h2>
+      <div class="life">
+        <div class="lstate"><div class="s">on demand</div><div class="t">Run</div><div class="d">Launched by the control edge on the first matched request.</div></div>
+        <div class="lstate"><div class="s">serving</div><div class="t">Active</div><div class="d">Holds the tunnel, egresses matched flows from the stable IP.</div></div>
+        <div class="lstate free"><div class="s">idle · minutes</div><div class="t">Suspend</div><div class="d">Memory + disk frozen. Zero compute cost. Auto-resumes on the next byte.</div></div>
+        <div class="lstate"><div class="s">idle · hours</div><div class="t">Terminate</div><div class="d">Reclaimed; only the DynamoDB intent row remains. Relaunched from intent when needed.</div></div>
+        <div class="lstate"><div class="s">at ~8h</div><div class="t">Rotate</div><div class="d">Make-before-break to a successor. Outer tunnel moves; long-lived inner flows reconnect.</div></div>
+      </div>
+    </section>
+
+    <section aria-labelledby="dec">
+      <h2 id="dec">What's decided — and what's deliberately out</h2>
+      <div class="cols">
+        <div>
+          <p class="card-hd ok">Load-bearing decisions</p>
+          <div class="stack">
+            <div class="row"><span class="m">intent</span><span class="txt"><b>State is intent, not connections.</b> A session is rebuilt from a DynamoDB row: who, which region, which policy, which epoch.</span></div>
+            <div class="row"><span class="m">enforce×2</span><span class="txt"><b>Selectivity is enforced twice</b> — at the agent (fast path) and re-validated at the MicroVM (authoritative, since the client is untrusted).</span></div>
+            <div class="row"><span class="m">no route53</span><span class="txt"><b>DNS does discovery, not routing.</b> Edge geo + KeyValueStore replace Route53 placement; one CloudFront name is all that's configured.</span></div>
+            <div class="row"><span class="m">1 : user·region</span><span class="txt"><b>One MicroVM per (user, active region)</b> — typically 1–2 live, suspended when idle. Not per-session; not a big pool.</span></div>
+          </div>
+        </div>
+        <div>
+          <p class="card-hd warn">Honest limits &amp; non-goals</p>
+          <div class="stack">
+            <div class="row warn"><span class="m">8h seam</span><span class="txt"><b>The 8-hour cap forces a reconnect.</b> Continuous single flows longer than that are out of scope — no TCP handoff, by design.</span></div>
+            <div class="row warn"><span class="m">5 regions</span><span class="txt"><b>MicroVMs are in 5 regions at GA</b> (Tokyo yes, Singapore no). Named-but-unavailable regions substitute at write time, recorded explicitly.</span></div>
+            <div class="row warn"><span class="m">not a vpn</span><span class="txt"><b>Not a full tunnel, not multi-tenant (v1), not a DNS resolver.</b> Default is direct; only matched destinations route.</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <p class="foot">Sources: docs/adr/0001-gateway-execution-model.md · docs/product/use-case.md · docs/research/0001-*. Design settled via a two-model council; build sequenced in docs/superpowers/plans/2026-07-07-meridian-reference-architecture.md.</p>
+
+  </div>
+</div>
