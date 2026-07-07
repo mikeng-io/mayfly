@@ -1,0 +1,181 @@
+<style>
+  :root{
+    --ground:#f8f7f5; --panel:#ffffff; --panel-2:#f1efec; --ink:#181410;
+    --muted:#63594e; --faint:#938a7e; --border:#e4dfd8; --border-strong:#cfc7bc;
+    --ember:#c2521c; --ember-bg:#f6e7dd;
+    --vpc:#2f6f6a; --vpc-bg:#d9ecea;
+    --win:#3c7a3c; --dead:#a23b34;
+    --shadow:0 1px 2px rgba(24,20,16,.05),0 10px 28px rgba(24,20,16,.06);
+    --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --ground:#12100e; --panel:#1b1815; --panel-2:#151310; --ink:#efe9e2;
+    --muted:#a99e91; --faint:#776d61; --border:#2a2621; --border-strong:#3a352e;
+    --ember:#e87a3c; --ember-bg:#2a1a10; --vpc:#48b3aa; --vpc-bg:#0f2624;
+    --win:#5cb85c; --dead:#e08079;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 14px 34px rgba(0,0,0,.4);
+  }}
+  :root[data-theme="light"]{
+    --ground:#f8f7f5; --panel:#ffffff; --panel-2:#f1efec; --ink:#181410; --muted:#63594e;
+    --faint:#938a7e; --border:#e4dfd8; --border-strong:#cfc7bc; --ember:#c2521c; --ember-bg:#f6e7dd;
+    --vpc:#2f6f6a; --vpc-bg:#d9ecea; --win:#3c7a3c; --dead:#a23b34;
+    --shadow:0 1px 2px rgba(24,20,16,.05),0 10px 28px rgba(24,20,16,.06);
+  }
+  :root[data-theme="dark"]{
+    --ground:#12100e; --panel:#1b1815; --panel-2:#151310; --ink:#efe9e2; --muted:#a99e91;
+    --faint:#776d61; --border:#2a2621; --border-strong:#3a352e; --ember:#e87a3c; --ember-bg:#2a1a10;
+    --vpc:#48b3aa; --vpc-bg:#0f2624; --win:#5cb85c; --dead:#e08079;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 14px 34px rgba(0,0,0,.4);
+  }
+
+  *{box-sizing:border-box;}
+  body{margin:0;}
+  .page{background:var(--ground);color:var(--ink);font-family:var(--sans);line-height:1.55;
+    -webkit-font-smoothing:antialiased;padding:clamp(20px,5vw,60px) clamp(16px,5vw,48px) 80px;}
+  .wrap{max-width:1000px;margin:0 auto;}
+
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--ember);margin:0 0 12px;}
+  h1{font-size:clamp(28px,5vw,44px);line-height:1.04;letter-spacing:-.02em;font-weight:840;margin:0 0 12px;text-wrap:balance;}
+  .lede{font-size:clamp(16px,2.3vw,19px);color:var(--muted);max-width:64ch;margin:0 0 8px;}
+  .lede b{color:var(--ink);font-weight:640;}
+
+  h2{font-family:var(--mono);font-size:12px;letter-spacing:.11em;text-transform:uppercase;color:var(--faint);
+    font-weight:600;margin:0 0 16px;padding-bottom:9px;border-bottom:1px solid var(--border);}
+  section{margin-top:46px;}
+
+  /* flow */
+  .flow{display:flex;flex-direction:column;gap:0;}
+  .fnode{display:grid;grid-template-columns:150px 1fr;gap:16px;align-items:baseline;
+    border:1px solid var(--border);border-radius:11px;background:var(--panel);padding:13px 15px;box-shadow:var(--shadow);}
+  .fnode .k{font-family:var(--mono);font-size:11px;color:var(--ember);letter-spacing:.03em;text-transform:uppercase;}
+  .fnode .v{font-size:13.5px;color:var(--muted);}
+  .fnode .v b{color:var(--ink);font-weight:620;}
+  .fnode.vpc{border-left:3px solid var(--vpc);}
+  .fnode.vpc .k{color:var(--vpc);}
+  .down{display:flex;justify-content:center;padding:5px 0;color:var(--faint);font-size:15px;}
+  @media(max-width:620px){.fnode{grid-template-columns:1fr;gap:4px;}}
+
+  .why{border:1px solid var(--border);border-radius:12px;background:var(--panel);padding:18px 20px;box-shadow:var(--shadow);}
+  .why h3{margin:0 0 6px;font-size:16px;letter-spacing:-.01em;}
+  .why p{margin:0 0 8px;font-size:14.5px;color:var(--muted);}
+  .why p:last-child{margin-bottom:0;}
+  .why b{color:var(--ink);font-weight:620;}
+
+  .tablewrap{overflow-x:auto;}
+  table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:600px;}
+  th,td{text-align:left;padding:11px 13px;border-bottom:1px solid var(--border);vertical-align:top;}
+  th{font-family:var(--mono);font-size:11px;letter-spacing:.03em;text-transform:uppercase;color:var(--faint);font-weight:600;}
+  td.feat{color:var(--ink);font-weight:600;white-space:nowrap;}
+  th.mf,td.mf{background:var(--ember-bg);}
+  th.mf{color:var(--ember);}
+  .yes{color:var(--win);font-weight:700;font-family:var(--mono);}
+  .no{color:var(--dead);font-weight:700;font-family:var(--mono);}
+  .cellnote{color:var(--muted);font-size:12px;display:block;margin-top:1px;}
+
+  .keyrow{margin-top:14px;padding:14px 16px;border-radius:11px;background:var(--ember-bg);border:1px solid var(--ember);font-size:14.5px;color:var(--ink);}
+  .keyrow b{color:var(--ember);}
+
+  .verdict{margin-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .vcard{border:1px solid var(--border);border-radius:12px;padding:16px 18px;background:var(--panel);}
+  .vcard.use{border-top:3px solid var(--vpc);}
+  .vcard.build{border-top:3px solid var(--ember);}
+  .vcard h3{margin:0 0 8px;font-size:14px;}
+  .vcard.use h3{color:var(--vpc);}
+  .vcard.build h3{color:var(--ember);}
+  .vcard ul{margin:0;padding-left:18px;font-size:13.5px;color:var(--muted);}
+  .vcard li{margin-bottom:5px;}
+  .vcard li b{color:var(--ink);font-weight:620;}
+  @media(max-width:640px){.verdict{grid-template-columns:1fr;}}
+
+  .foot{margin-top:46px;padding-top:16px;border-top:1px solid var(--border);font-family:var(--mono);font-size:12px;color:var(--faint);}
+</style>
+
+<div class="page">
+  <div class="wrap">
+
+    <p class="eyebrow">Mayfly · architecture &amp; the "why not CodeBuild?" question</p>
+    <h1>Mayfly, and why not CodePipeline / CodeBuild</h1>
+    <p class="lede">The honest version: <b>CodeBuild already hosts GitHub Actions runners in your VPC.</b> So Mayfly has to earn its place — and the comparison shows exactly the one thing it does that CodeBuild's model structurally can't.</p>
+
+    <section>
+      <h2>Current architecture</h2>
+      <div class="flow">
+        <div class="fnode"><span class="k">GitHub</span><span class="v"><b>workflow_job: queued</b> — a job with <code style="font-family:var(--mono)">runs-on: [self-hosted, mayfly]</code> fires a webhook.</span></div>
+        <div class="down">↓</div>
+        <div class="fnode"><span class="k">Webhook · Lambda</span><span class="v">Verify HMAC → filter <b>queued + mayfly label</b> → <b>return 2xx fast</b> → enqueue.</span></div>
+        <div class="down">↓</div>
+        <div class="fnode"><span class="k">Queue · SQS</span><span class="v">Short delay — decouples the ack, lets fast cancellations settle.</span></div>
+        <div class="down">↓</div>
+        <div class="fnode"><span class="k">Control · Lambda</span><span class="v"><b>Re-check still queued</b> → <b>fork check</b> → resume a suspended MicroVM → mint &amp; inject a <b>JIT config</b> (name = job id).</span></div>
+        <div class="down">↓</div>
+        <div class="fnode vpc"><span class="k">Runner · MicroVM</span><span class="v">In <b>your VPC</b>. Runs <code style="font-family:var(--mono)">run.sh --jitconfig</code> for <b>one</b> job; reaches private resources (RDS) under its security group. Fork PRs get none.</span></div>
+        <div class="down">↓</div>
+        <div class="fnode"><span class="k">Teardown</span><span class="v">Three layers: VM self-terminates on process exit · <b>completed</b> webhook · reconciler sweep. A replacement is warmed to hold the pool.</span></div>
+      </div>
+      <p style="margin:14px 0 0;font-size:13px;color:var(--faint);">State + correlation <code style="font-family:var(--mono)">{jobId → microvmId → runnerName}</code> in DynamoDB · auth via a GitHub App (1-hour install tokens).</p>
+    </section>
+
+    <section>
+      <h2>Why not CodePipeline?</h2>
+      <div class="why">
+        <p>CodePipeline is <b>orchestration</b> (source → build → deploy), not a runner. Using it would mean <b>migrating your CI off GitHub Actions</b> — abandoning your existing workflows, the marketplace-action ecosystem, and developer familiarity.</p>
+        <p>Mayfly's goal is the opposite: <b>keep your GitHub Actions workflows exactly as they are</b>, and only change <em>where the compute runs</em>. So CodePipeline isn't the comparison — CodeBuild is.</p>
+      </div>
+    </section>
+
+    <section>
+      <h2>Why not CodeBuild-hosted GitHub Actions runners?</h2>
+      <p style="margin:0 0 16px;font-size:14.5px;color:var(--muted);">This is the real question. CodeBuild runs your GitHub Actions jobs on AWS, in your VPC, ephemerally — since 2024. It gives you two fleet modes, and forces a trade between them:</p>
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="min-width:150px">&nbsp;</th>
+              <th>CodeBuild<br>on-demand</th>
+              <th>CodeBuild<br>reserved capacity</th>
+              <th class="mf">Mayfly<br>(MicroVM)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td class="feat">Runs your GHA jobs</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td class="mf"><span class="yes">✓</span></td></tr>
+            <tr><td class="feat">Private VPC access</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td class="mf"><span class="yes">✓</span></td></tr>
+            <tr><td class="feat">Per-job isolation</td><td><span class="yes">✓</span><span class="cellnote">Firecracker under the hood</span></td><td><span class="yes">✓</span></td><td class="mf"><span class="yes">✓</span><span class="cellnote">Firecracker MicroVM</span></td></tr>
+            <tr><td class="feat">Managed (no infra to build)</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td class="mf"><span class="no">✗</span><span class="cellnote">you own the control plane</span></td></tr>
+            <tr><td class="feat">Fast start</td><td><span class="no">✗</span><span class="cellnote">cold provision</span></td><td><span class="yes">✓</span><span class="cellnote">persistent hosts</span></td><td class="mf"><span class="yes">✓</span><span class="cellnote">resume from snapshot</span></td></tr>
+            <tr><td class="feat">~Zero idle cost</td><td><span class="yes">✓</span></td><td><span class="no">✗</span><span class="cellnote">you pay for the fleet</span></td><td class="mf"><span class="yes">✓</span><span class="cellnote">suspended = no compute</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="keyrow">
+        The bottom two rows are the whole point. <b>CodeBuild makes you choose:</b> reserved capacity (fast, but you pay for idle hosts) <b>or</b> on-demand (no idle cost, but cold starts). <b>Mayfly is the only column with both</b> — fast start <em>and</em> ~zero idle cost — because a MicroVM can <b>suspend to zero and resume in milliseconds</b>. That combination is the novel capability, and it's what the article is actually about.
+      </div>
+    </section>
+
+    <section>
+      <h2>The honest verdict</h2>
+      <div class="verdict">
+        <div class="vcard use">
+          <h3>Use CodeBuild if…</h3>
+          <ul>
+            <li>You want <b>production CI on AWS today</b> — managed, mature, supported.</li>
+            <li>You don't want to run a control plane.</li>
+            <li>Reserved-capacity idle cost, or on-demand cold starts, are acceptable.</li>
+          </ul>
+        </div>
+        <div class="vcard build">
+          <h3>Mayfly's reason to exist</h3>
+          <ul>
+            <li>It <b>showcases the two-week-old Lambda MicroVM primitive</b> in a real scenario.</li>
+            <li>It delivers the one thing CodeBuild's model can't: <b>warm start at ~zero idle cost</b>, via suspend/resume.</li>
+            <li>A <b>self-owned control plane</b> — a building block SREs can shape (pooling, policy, lifecycle), not a black box.</li>
+          </ul>
+        </div>
+      </div>
+      <p style="margin:16px 0 0;font-size:14px;color:var(--muted);">For the write-up: <b style="color:var(--ink)">address "why not CodeBuild" head-on.</b> It's the first thing a reader asks — and the honest answer (CodeBuild wins for production; Mayfly explores a capability it lacks) is what makes the piece credible.</p>
+    </section>
+
+    <p class="foot">Mayfly · comparison · CodeBuild GHA runners GA 2024-04, VPC 2024-05</p>
+
+  </div>
+</div>
