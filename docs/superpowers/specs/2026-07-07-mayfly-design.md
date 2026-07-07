@@ -6,27 +6,34 @@
 
 ## Summary
 
-Mayfly runs GitHub Actions jobs on **AWS Lambda MicroVMs** as **ephemeral, VM-isolated,
-VPC-native self-hosted runners.** Each job gets a fresh MicroVM that resumes from a warm
-snapshot, registers just-in-time for a single job, can privately reach your AWS resources
-(RDS, internal services) through a VPC egress connector under a per-workflow access
-policy, and is destroyed on completion. No standing runner fleet; scale-to-zero.
+Mayfly runs **untrusted and AI-generated code in CI** on **AWS Lambda MicroVMs**. Each
+GitHub Actions job runs in a fresh, single-use MicroVM — **its own kernel, a true VM
+isolation boundary** — so code you can't trust (fork PRs, AI-agent-authored changes,
+AI-generated artifacts) is contained in a way a *container* runner cannot match. Its access
+to your resources is **governed by policy** ("invisible fences"): it reaches only what it's
+allowed to, and nothing else. The runner registers just-in-time for one job and is destroyed
+on completion. No standing fleet; scale-to-zero.
 
 *(A mayfly is born, does one thing, and dies within a day — the runner lifecycle.)*
 
 ## Why (value proposition)
 
-Existing options each miss something:
+The problem: **AI agents now write code, and CI increasingly runs code you didn't write** —
+fork PRs, AI-authored changes, AI-generated artifacts. Running that in CI means running
+**untrusted** code, often with access to secrets and private resources.
 
-- **GitHub-hosted runners:** no native AWS VPC access — can't reach your private resources.
-- **Self-hosted runners (EC2 / ARC-on-k8s):** get VPC access, but require a **standing
-  fleet + ops**, and container runners share a kernel (weaker isolation).
+Every managed CI runner is **container-based** — GitHub-hosted, CodeBuild-hosted runners,
+ARC-on-k8s — so untrusted code runs on a **shared kernel**. Mayfly runs it in a **microVM**
+(own kernel, VM boundary) and **governs its access** with policy. That combination —
+VM-isolated *and* access-governed untrusted-code execution, integrated into your existing
+GitHub Actions workflow — is the gap.
 
-**Mayfly's combination is the gap:** serverless + ephemeral + per-job VM isolation +
-native VPC access + policy-governed — with no fleet to run.
+*(Secondary, real but narrower: MicroVM suspend/resume gives fast start at ~zero idle cost —
+a trade CodeBuild forces you to make. See `docs/mayfly-vs-codebuild.html`.)*
 
-**Headline demo:** an ephemeral, isolated CI job **securely queries a VPC-private RDS** —
-something GitHub-hosted runners cannot do.
+**Headline demo:** untrusted / AI-generated code runs in a CI job, is **contained in its
+microVM** (can't escape to the host or other jobs) and **can reach only what policy allows**
+(the test DB, nothing else) — visibly stronger than a container runner.
 
 ## Goals
 
@@ -47,8 +54,9 @@ something GitHub-hosted runners cannot do.
 
 ## Users
 
-A developer/team running CI on AWS who needs jobs to reach **private** AWS resources
-without a standing self-hosted fleet or public exposure.
+A team whose CI runs code it can't fully trust — **open-source maintainers** taking fork
+PRs, and teams running **AI-agent-authored or AI-generated code** in their pipelines — who
+want VM-grade isolation and governed access without abandoning GitHub Actions.
 
 ## Architecture
 
@@ -67,8 +75,9 @@ All TypeScript; AWS CDK for IaC. GitHub mechanics grounded in
 4. **Runner MicroVM image** — Dockerfile-built image with the Actions runner agent + toolchain;
    boots ready and is suspended *un-registered*; on resume it runs `./run.sh --jitconfig <blob>`
    for exactly one job, then the process exits (self-clean).
-5. **Network profile** — v1: internal jobs get a single security group to the demo's private
-   resources; **fork-PR jobs get none** (the fork check is the gate). See Access policy.
+5. **Access governance** — classify each job (fork / AI-marked = untrusted) → apply a
+   **deny-by-default** network profile for untrusted jobs, a broader one for trusted. A
+   first-class pillar (see Access governance).
 6. **State** (DynamoDB) — pool inventory + correlation record `{jobId → microvmId → runnerName}`
    + lifecycle state; the desired-vs-observed source of truth. Idempotency keyed on `jobId`.
 7. **Reconciler** (EventBridge Scheduler Lambda) — two-phase orphan sweep (mark-then-terminate),
@@ -92,15 +101,20 @@ All TypeScript; AWS CDK for IaC. GitHub mechanics grounded in
 **Fallback (Approach B)** if JIT-on-resume proves awkward: pure launch-per-job from the snapshot,
 no suspended pool. Still a valid showcase (snapshot launches are quick).
 
-## Access policy (v1: minimal; governance as a documented extension)
+## Access governance ("invisible fences") — a first-class pillar
 
-- **v1 (built):** internal jobs get a **single security group** to the demo's private resources
-  (the VPC-only RDS); **fork-PR jobs get no VPC access** (decided by the mandatory fork check).
-  One boolean — no policy engine, but the load-bearing safety property is present.
-- **Production hardening (documented, not built in v1):** a small policy — in-repo file or
-  SSM — mapping trigger context (branch, event, fork vs internal) → network profile (which
-  SG, or none), so fork-PR code gets no private access. This is the "invisible fences"
-  story; the write-up describes it, v1 doesn't implement the engine.
+Because the whole point is running **untrusted** code, controlling what it can reach is core,
+not an add-on.
+
+- **Trust classification:** each job is classified — *trusted* (internal branch) or
+  *untrusted* (fork PR, or a workflow/label marking AI-generated code). The fork check
+  (`GET .../actions/runs/{run_id}`, compare `head_repository.id`) drives this.
+- **Network profile per trust level:** untrusted jobs get a **deny-by-default** profile —
+  a security group / egress allowlist scoped to only what they legitimately need (e.g. the
+  test DB, package registries); trusted jobs get a broader profile. No profile = no private access.
+- **v1 scope:** a small policy config (in-repo file or SSM) mapping `{trust level} → {network
+  profile}`, applied when the MicroVM is provisioned. Two or three profiles is enough to
+  *demonstrate* governed isolation — this is the demo, not a deferred extension.
 
 ## SRE / operational design
 
@@ -130,11 +144,15 @@ no suspended pool. Still a valid showcase (snapshot launches are quick).
 
 ## Success criteria (the showcase)
 
-- Open a PR → a job runs on a Mayfly MicroVM runner (visible in the GitHub UI + logs).
-- The job **privately queries a VPC-only RDS** and succeeds — demonstrably impossible on
-  GitHub-hosted runners.
-- Metrics show warm-resume start latency and per-job fresh-VM isolation.
-- `cdk deploy` reproduces it; a README explains setup and honest limits.
+- A CI job runs code marked **untrusted / AI-generated** on a Mayfly MicroVM runner.
+- **Isolation shown:** the job is contained in its own microVM — a container-escape-style
+  probe that would cross a shared kernel gets nothing; each job is a fresh VM.
+- **Governance shown ("invisible fences"):** the untrusted job reaches only its
+  policy-allowed resource (the test DB) and is **blocked from everything else**; a trusted
+  job gets the broader profile.
+- *(Secondary)* metrics show warm-resume latency vs cold.
+- `cdk deploy` reproduces it; a README explains setup and honest limits (incl. why this is
+  for untrusted-code CI, and when CodeBuild is the better choice).
 
 ## Open questions
 
