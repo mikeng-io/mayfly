@@ -52,44 +52,51 @@ without a standing self-hosted fleet or public exposure.
 
 ## Architecture
 
-All TypeScript; AWS CDK for IaC.
+All TypeScript; AWS CDK for IaC. GitHub mechanics grounded in
+[`docs/research/github-actions-jit-runners.md`](../../research/github-actions-jit-runners.md).
 
-1. **Webhook receiver** (Lambda + Function URL) — verifies GitHub `workflow_job` webhooks;
-   enqueues provision (`queued`) / teardown (`completed`).
-2. **Control plane** (Lambda) — pool + job orchestration: resume a suspended MicroVM,
-   mint & inject a JIT ephemeral runner config, mark busy; on completion terminate + refill.
-3. **Runner MicroVM image** — Dockerfile-built image with the GitHub Actions runner agent
-   + toolchain; boots to ready and is suspended *un-registered*; a lifecycle hook performs
-   JIT registration on resume and runs one ephemeral job.
-4. **Runner network profile** — v1: a single security group that lets the runner reach the
-   demo's private resources. (Per-branch/trust policy engine is deferred — see Access policy.)
-5. **State** (DynamoDB) — pool inventory, job↔MicroVM mapping, lifecycle state; the
-   desired-vs-observed source of truth.
-6. **Reconciler** (EventBridge Scheduler Lambda) — sweep orphaned/leaked MicroVMs, refill
-   the pool to target, enforce a max-runtime cap.
-7. **Provider interface** — the CI-specific surface (webhook parse, runner registration,
-   job lifecycle) behind an interface; the GitHub adapter is the only v1 implementation.
+1. **Webhook receiver** (Lambda + Function URL) — verifies the `X-Hub-Signature-256` HMAC,
+   filters `action == queued` with `labels ⊇ {self-hosted, mayfly}`, **returns 2xx
+   immediately**, and enqueues the job. Routes `completed` to teardown.
+2. **Provision queue** (SQS, short delivery delay) — decouples the fast ack from async
+   provisioning and lets fast cancellations settle before we launch.
+3. **Control plane** (Lambda, off SQS) — **re-checks the job is still `queued`**, runs the
+   **fork check** (`GET .../actions/runs/{run_id}` → compare `head_repository.id`), resumes a
+   suspended MicroVM, mints a **JIT config** (`generate-jitconfig`, `name` = job id) and injects
+   it, records correlation. On `completed`/exit: terminate + refill.
+4. **Runner MicroVM image** — Dockerfile-built image with the Actions runner agent + toolchain;
+   boots ready and is suspended *un-registered*; on resume it runs `./run.sh --jitconfig <blob>`
+   for exactly one job, then the process exits (self-clean).
+5. **Network profile** — v1: internal jobs get a single security group to the demo's private
+   resources; **fork-PR jobs get none** (the fork check is the gate). See Access policy.
+6. **State** (DynamoDB) — pool inventory + correlation record `{jobId → microvmId → runnerName}`
+   + lifecycle state; the desired-vs-observed source of truth. Idempotency keyed on `jobId`.
+7. **Reconciler** (EventBridge Scheduler Lambda) — two-phase orphan sweep (mark-then-terminate),
+   refill the pool, enforce a max-runtime cap. **Not optional** — webhook delivery isn't guaranteed.
+8. **Auth** — a **GitHub App** (Administration:write, Actions:read [+ org Self-hosted
+   runners:write]); 1-hour installation tokens minted from the webhook's `installation.id`.
+9. **Provider interface** — the CI-specific surface behind an interface; GitHub adapter only in v1.
 
 ## Job lifecycle (Approach C — snapshot-warm + JIT-on-resume)
 
 1. **Warm pool:** N MicroVMs booted with runner + toolchain, then **suspended** (near-zero
    cost), NOT yet registered.
-2. `workflow_job: queued` → control plane picks a suspended VM, **resumes** it (ms),
-   attaches the runner's VPC egress connector + security group, mints a **JIT ephemeral
-   runner config** from GitHub, injects it → runner takes that one job.
-3. Job runs in the isolated VM, with policy-scoped private access.
-4. `workflow_job: completed` (or ephemeral runner exits) → control plane **terminates** the
-   VM, records it, **launches + suspends a replacement** to hold the pool at target.
-5. Reconciler sweeps anything that leaked.
+2. `workflow_job: queued` webhook → verify + label-filter → **return 2xx** → enqueue (SQS, short delay).
+3. Control plane (off SQS): **re-check still queued** → **fork check** → pick a suspended VM and
+   **resume** it (ms) → attach the network profile (fork ⇒ none, internal ⇒ demo SG) → mint a
+   **JIT config** (`name` = job id) and inject → runner runs `./run.sh --jitconfig …` for one job.
+4. **Teardown, three layers:** (a) the MicroVM self-terminates when the runner process exits
+   (authoritative); (b) the `completed` webhook is a fast-path trigger; (c) the reconciler sweeps
+   anything that leaked. On teardown, **launch + suspend a replacement** to hold the pool.
 
-**Fallback (Approach B)** if JIT-on-resume proves awkward: pure launch-per-job from the
-snapshot, no suspended pool. Still a valid showcase (snapshot launches are quick).
+**Fallback (Approach B)** if JIT-on-resume proves awkward: pure launch-per-job from the snapshot,
+no suspended pool. Still a valid showcase (snapshot launches are quick).
 
 ## Access policy (v1: minimal; governance as a documented extension)
 
-- **v1 (built):** the runner MicroVM gets a **single security group** granting access to the
-  demo's private resources (the VPC-only RDS). That's all the showcase needs — no policy
-  engine.
+- **v1 (built):** internal jobs get a **single security group** to the demo's private resources
+  (the VPC-only RDS); **fork-PR jobs get no VPC access** (decided by the mandatory fork check).
+  One boolean — no policy engine, but the load-bearing safety property is present.
 - **Production hardening (documented, not built in v1):** a small policy — in-repo file or
   SSM — mapping trigger context (branch, event, fork vs internal) → network profile (which
   SG, or none), so fork-PR code gets no private access. This is the "invisible fences"
