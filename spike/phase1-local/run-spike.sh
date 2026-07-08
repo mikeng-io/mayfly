@@ -11,7 +11,7 @@ OWNER=mikeng-io; REPO=mayfly-test
 API=https://api.github.com
 AUTH=(-H "Authorization: Bearer $GITHUB_PAT" -H "X-GitHub-Api-Version: 2022-11-28")
 LABELS='["self-hosted","mayfly"]'
-IMG=mayfly-runner:spike; CTR=mayfly-spike
+IMG=mayfly-runner:spike; CTR=mayfly-spike; HOST_PORT=18080
 
 case "$(uname -m)" in
   arm64|aarch64) RUNNER_ARCH=arm64 ;;
@@ -35,16 +35,16 @@ if [ -z "$ENCODED" ]; then echo "[cp] JIT mint FAILED:"; echo "$JIT" | jq .; exi
 echo "[cp] JIT config minted"
 
 docker rm -f "$CTR" >/dev/null 2>&1 || true
-docker run -d --name "$CTR" -p 8080:8080 "$IMG" >/dev/null
+docker run -d --name "$CTR" -p "$HOST_PORT":8080 "$IMG" >/dev/null
 echo -n "[cp] waiting for launcher health"
-for i in $(seq 1 30); do curl -sf localhost:8080/health >/dev/null 2>&1 && { echo " …ok"; break; }; echo -n "."; sleep 1; done
+for i in $(seq 1 30); do curl -sf "localhost:$HOST_PORT/health" >/dev/null 2>&1 && { echo " …ok"; break; }; echo -n "."; sleep 1; done
 
 echo "[cp] dispatching workflow…"
 curl -s -X POST "${AUTH[@]}" "$API/repos/$OWNER/$REPO/actions/workflows/mayfly-spike.yml/dispatches" \
   -d "{\"ref\":\"$DEFAULT_BRANCH\"}" -o /dev/null -w "  dispatch http:%{http_code}\n"
 
 echo "[cp] handing JIT to in-VM launcher…"
-curl -s -X POST localhost:8080/run -H 'content-type: application/json' \
+curl -s -X POST "localhost:$HOST_PORT/run" -H 'content-type: application/json' \
   -d "{\"jitconfig\":\"$ENCODED\"}" -o /dev/null -w "  launcher http:%{http_code}\n"
 
 echo "[cp] --- runner logs (container exits when the one job finishes) ---"
