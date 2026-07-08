@@ -1,0 +1,158 @@
+<style>
+  :root{
+    --ground:#f8f7f5; --panel:#ffffff; --panel-2:#f1efec; --ink:#181410;
+    --muted:#63594e; --faint:#938a7e; --border:#e4dfd8; --border-strong:#cfc7bc;
+    --ember:#c2521c; --ember-bg:#f6e7dd;
+    --ok:#3c7a3c; --ok-bg:#e0efe0;
+    --next:#9a6a15; --next-bg:#f4ead4;
+    --term:#0c0a08; --term-ink:#e8e2d6; --term-dim:#9a9284;
+    --shadow:0 1px 2px rgba(24,20,16,.05),0 10px 28px rgba(24,20,16,.06);
+    --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --ground:#12100e; --panel:#1b1815; --panel-2:#151310; --ink:#efe9e2;
+    --muted:#a99e91; --faint:#776d61; --border:#2a2621; --border-strong:#3a352e;
+    --ember:#e87a3c; --ember-bg:#2a1a10; --ok:#5cb85c; --ok-bg:#12240f;
+    --next:#e0b24a; --next-bg:#251d0d; --term:#0a0908; --term-ink:#e8e2d6; --term-dim:#8a8478;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 14px 34px rgba(0,0,0,.4);
+  }}
+  :root[data-theme="light"]{
+    --ground:#f8f7f5; --panel:#ffffff; --panel-2:#f1efec; --ink:#181410; --muted:#63594e;
+    --faint:#938a7e; --border:#e4dfd8; --border-strong:#cfc7bc; --ember:#c2521c; --ember-bg:#f6e7dd;
+    --ok:#3c7a3c; --ok-bg:#e0efe0; --next:#9a6a15; --next-bg:#f4ead4;
+    --term:#0c0a08; --term-ink:#e8e2d6; --term-dim:#9a9284;
+    --shadow:0 1px 2px rgba(24,20,16,.05),0 10px 28px rgba(24,20,16,.06);
+  }
+  :root[data-theme="dark"]{
+    --ground:#12100e; --panel:#1b1815; --panel-2:#151310; --ink:#efe9e2; --muted:#a99e91;
+    --faint:#776d61; --border:#2a2621; --border-strong:#3a352e; --ember:#e87a3c; --ember-bg:#2a1a10;
+    --ok:#5cb85c; --ok-bg:#12240f; --next:#e0b24a; --next-bg:#251d0d;
+    --term:#0a0908; --term-ink:#e8e2d6; --term-dim:#8a8478;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 14px 34px rgba(0,0,0,.4);
+  }
+
+  *{box-sizing:border-box;}
+  body{margin:0;}
+  .page{background:var(--ground);color:var(--ink);font-family:var(--sans);line-height:1.55;
+    -webkit-font-smoothing:antialiased;padding:clamp(20px,5vw,60px) clamp(16px,5vw,48px) 80px;}
+  .wrap{max-width:960px;margin:0 auto;}
+
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--ember);margin:0 0 12px;}
+  .pass{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12px;font-weight:700;
+    color:var(--ok);background:var(--ok-bg);border:1px solid var(--ok);border-radius:999px;padding:4px 12px;letter-spacing:.04em;margin-bottom:14px;}
+  h1{font-size:clamp(28px,5vw,44px);line-height:1.05;letter-spacing:-.02em;font-weight:840;margin:0 0 12px;text-wrap:balance;}
+  .q{font-size:clamp(15px,2.2vw,18px);color:var(--muted);max-width:66ch;margin:0 0 6px;border-left:3px solid var(--ember);padding-left:14px;}
+  .q b{color:var(--ink);font-weight:640;}
+
+  h2{font-family:var(--mono);font-size:12px;letter-spacing:.11em;text-transform:uppercase;color:var(--faint);
+    font-weight:600;margin:0 0 16px;padding-bottom:9px;border-bottom:1px solid var(--border);}
+  section{margin-top:44px;}
+
+  .flow{display:flex;flex-direction:column;gap:2px;}
+  .fstep{display:grid;grid-template-columns:26px 1fr;gap:14px;padding:12px 0;border-bottom:1px solid var(--border);}
+  .fstep:last-child{border-bottom:0;}
+  .fstep .n{font-family:var(--mono);font-size:13px;color:var(--ember);font-weight:700;padding-top:1px;}
+  .fstep .b{font-size:14.5px;color:var(--muted);}
+  .fstep .b b{color:var(--ink);font-weight:640;}
+  .fstep code{font-family:var(--mono);font-size:12.5px;background:var(--panel-2);border:1px solid var(--border);border-radius:4px;padding:1px 5px;color:var(--ink);}
+  .tag{display:inline-block;font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;
+    color:var(--ember);background:var(--ember-bg);border-radius:4px;padding:1px 6px;margin-left:4px;}
+
+  .term{background:var(--term);border-radius:12px;padding:18px 20px;overflow-x:auto;box-shadow:var(--shadow);border:1px solid rgba(255,255,255,.06);}
+  .term pre{margin:0;font-family:var(--mono);font-size:12.5px;line-height:1.7;color:var(--term-ink);white-space:pre;}
+  .term .dim{color:var(--term-dim);}
+  .term .g{color:#7bd88f;}
+  .term .a{color:#e0b24a;}
+
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  .card{border:1px solid var(--border);border-radius:12px;background:var(--panel);padding:18px;box-shadow:var(--shadow);}
+  .card.ok{border-top:3px solid var(--ok);}
+  .card.next{border-top:3px solid var(--next);}
+  .card h3{margin:0 0 12px;font-size:14px;display:flex;align-items:center;gap:8px;}
+  .card.ok h3{color:var(--ok);}
+  .card.next h3{color:var(--next);}
+  .card ul{margin:0;padding-left:2px;list-style:none;display:flex;flex-direction:column;gap:9px;}
+  .card li{display:grid;grid-template-columns:16px 1fr;gap:9px;font-size:13.5px;color:var(--muted);}
+  .card li b{color:var(--ink);font-weight:620;}
+  .card .mk{font-family:var(--mono);font-weight:700;}
+  .card.ok .mk{color:var(--ok);}
+  .card.next .mk{color:var(--next);}
+  @media(max-width:640px){.cols{grid-template-columns:1fr;}}
+
+  .caveat{margin-top:18px;font-size:13px;color:var(--faint);border:1px dashed var(--border-strong);border-radius:10px;padding:12px 14px;}
+  .caveat b{color:var(--muted);}
+
+  .meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px;}
+  .chip{font-family:var(--mono);font-size:11.5px;color:var(--muted);background:var(--panel);border:1px solid var(--border-strong);border-radius:999px;padding:4px 10px;}
+  .foot{margin-top:44px;padding-top:16px;border-top:1px solid var(--border);font-family:var(--mono);font-size:12px;color:var(--faint);}
+</style>
+
+<div class="page">
+  <div class="wrap">
+
+    <p class="eyebrow">Mayfly · crux spike · phase 1</p>
+    <div class="pass">✓ PASS</div>
+    <h1>The in-VM launcher hand-off works</h1>
+    <p class="q"><b>Question:</b> can an in-VM launcher receive a JIT runner config <b>over an HTTP endpoint</b> (the way it must, since a Lambda MicroVM exposes only an L7 endpoint — no SSH, no raw socket) and run <b>one real GitHub Actions job to clean exit</b>?</p>
+
+    <div class="meta">
+      <span class="chip">real repo: mikeng-io/mayfly-test</span>
+      <span class="chip">runner v2.335.1 · arm64</span>
+      <span class="chip">Docker stands in for the MicroVM</span>
+      <span class="chip">no AWS · 2026-07-08</span>
+    </div>
+
+    <section>
+      <h2>What it did — the exact sequence</h2>
+      <div class="flow">
+        <div class="fstep"><span class="n">1</span><span class="b">Control plane mints a JIT config — <code>POST generate-jitconfig</code> → GitHub returns <code>encoded_jit_config</code>. <span class="tag">Administration:write</span></span></div>
+        <div class="fstep"><span class="n">2</span><span class="b"><b>Hands the config to the in-VM launcher over HTTP</b> → <code>202 Accepted</code>. <span class="tag">models the MicroVM L7 endpoint</span></span></div>
+        <div class="fstep"><span class="n">3</span><span class="b">Launcher runs <code>run.sh --jitconfig &lt;blob&gt;</code> → runner <b>connects to GitHub outbound</b> (no inbound needed).</span></div>
+        <div class="fstep"><span class="n">4</span><span class="b">Workflow dispatched → job <code>smoke</code> queued → GitHub assigns it to the online runner.</span></div>
+        <div class="fstep"><span class="n">5</span><span class="b">Runner executes the job → <b>Succeeded</b>.</span></div>
+        <div class="fstep"><span class="n">6</span><span class="b"><b>Ephemeral:</b> runner removes its credentials, exits 0 → launcher exits 0 → container stops. Runner <b>auto-deregisters</b>.</span></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>The evidence</h2>
+      <div class="term"><pre>[launcher] received JIT config; starting runner for one job
+<span class="g">√ Connected to GitHub</span>
+Running job: smoke
+<span class="g">Job smoke completed with result: Succeeded</span>
+<span class="g">√ Removed .credentials</span>   <span class="dim">← auto-deregistered (ephemeral, single-use)</span>
+<span class="g">√ Removed .runner</span>
+[launcher] one job complete; exiting code=0
+<span class="dim">container exit code:</span> 0
+<span class="dim">GitHub run:</span> status=completed conclusion=<span class="g">success</span></pre></div>
+    </section>
+
+    <section>
+      <h2>What it proves — and what's still open</h2>
+      <div class="cols">
+        <div class="card ok">
+          <h3>✓ Proven / de-risked</h3>
+          <ul>
+            <li><span class="mk">✓</span><span><b>JIT config → <code>run.sh --jitconfig</code></b> works with a fine-grained PAT — one atomic call, nothing leakable on the box.</span></li>
+            <li><span class="mk">✓</span><span><b>The in-VM launcher HTTP hand-off</b> is the concrete answer to "how do you inject the config given L7-only ingress."</span></li>
+            <li><span class="mk">✓</span><span><b>Runner is outbound-only</b> — it dials GitHub; no inbound rule, no public listener.</span></li>
+            <li><span class="mk">✓</span><span><b>Ephemeral single-job lifecycle</b> behaves — runs one job, auto-deregisters, exits clean.</span></li>
+          </ul>
+        </div>
+        <div class="card next">
+          <h3>◑ Not yet proven → Phase 2</h3>
+          <ul>
+            <li><span class="mk">?</span><span><b>Does a real Lambda MicroVM stay running</b> (not auto-suspend) while the runner long-polls and executes? <b>The make-or-break.</b></span></li>
+            <li><span class="mk">?</span><span>The real L7 endpoint + <code>X-aws-proxy-auth</code> bearer hand-off (here modeled with a plain container port).</span></li>
+            <li><span class="mk">?</span><span><code>run</code> / <code>suspend</code> / <code>resume</code> / <code>terminate</code> behavior with a live runner inside.</span></li>
+          </ul>
+        </div>
+      </div>
+      <div class="caveat"><b>Honest caveat:</b> local Firecracker isn't available on macOS, so a <b>Docker container stood in for the MicroVM</b>. That proves the GitHub + launcher <em>logic</em> — not the Lambda MicroVM <em>platform behavior</em>, which is exactly what Phase 2 (real AWS) exists to test.</div>
+    </section>
+
+    <p class="foot">Mayfly · spike/phase1-local · reproducible: ./setup-repo.sh &amp;&amp; ./run-spike.sh</p>
+
+  </div>
+</div>
