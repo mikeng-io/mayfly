@@ -45,11 +45,26 @@ cd ..
 cd infra && npm run destroy           # removes the bucket + role (nothing orphaned)
 ```
 
-## Pass criteria
+## The experiment (per the pre-run review)
 
-- MicroVM state stays **RUNNING** throughout the job (never auto-suspends mid-job)
-- the workflow run conclusion is **success**
-- the launcher `/status` reports `done:true, code:0`
+The MicroVM state is observed **only via `get-microvm`** — never the endpoint — because
+endpoint traffic resets the idle timer / auto-resumes, which would mask the exact hazard.
+`run-spike-aws.sh` runs **two** experiments:
+
+- **HAZARD:** short idle policy (`HAZARD_IDLE=45`) + a job that sleeps `JOB_SLEEP=120s` →
+  expect the MicroVM to **SUSPEND mid-job** (confirms the auto-suspend hazard is real).
+- **SAFE:** no idle policy (auto-suspend off) + same job → expect it to **stay RUNNING and
+  succeed** (confirms the design's config).
+
+**Unknown #2 is RESOLVED** when the SAFE run passes (stays RUNNING + job `success`); the
+script exits non-zero otherwise. Tune with `JOB_SLEEP` / `HAZARD_IDLE` env vars.
+
+> Re-run Phase 1's `../phase1-local/setup-repo.sh` first if needed — the `mayfly-spike`
+> workflow now takes a `sleep` input, so the copy in the repo must be current.
+
+> The build `/ready` hook flag (port + `readyTimeoutInSeconds`) is the one thing to confirm
+> against `aws lambda-microvms create-microvm-image help` on first run; set it via
+> `MAYFLY_HOOKS_ARGS` if the build stalls on readiness.
 
 ## Open items this may surface (expected spike iteration)
 

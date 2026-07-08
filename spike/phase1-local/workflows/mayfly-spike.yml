@@ -1,6 +1,10 @@
 name: mayfly-spike
 on:
   workflow_dispatch:
+    inputs:
+      sleep:
+        description: "seconds the job sleeps (Phase 2 uses this to run a job longer than the idle window)"
+        default: "5"
 jobs:
   smoke:
     runs-on: [self-hosted, mayfly]
@@ -10,5 +14,7 @@ jobs:
           echo "hello from a Mayfly runner"
           echo "kernel:  $(uname -a)"
           echo "user:    $(whoami)"
-          echo "date:    $(date -u)"
           echo "runner:  ${RUNNER_NAME:-unknown}"
+          echo "sleeping ${{ inputs.sleep }}s"
+          sleep "${{ inputs.sleep }}"
+          echo "done"
