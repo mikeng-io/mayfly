@@ -1,0 +1,21 @@
+{
+  "name": "mayfly-spike-infra",
+  "version": "0.1.0",
+  "private": true,
+  "bin": { "mayfly-spike": "bin/mayfly-spike.js" },
+  "scripts": {
+    "cdk": "cdk",
+    "deploy": "cdk deploy --require-approval never --outputs-file ../cdk-outputs.json",
+    "destroy": "cdk destroy --force"
+  },
+  "devDependencies": {
+    "aws-cdk": "^2.170.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.3",
+    "@types/node": "^20.16.0"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.170.0",
+    "constructs": "^10.4.2"
+  }
+}

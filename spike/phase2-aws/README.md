@@ -10,24 +10,40 @@ to *"disable automatic suspension or configure a suitable idle duration"* for as
 spike sets a high `maxIdleDurationSeconds` and confirms empirically that a job runs to success
 in a held MicroVM.
 
+All AWS **resources** (S3 artifact bucket + IAM build role) are created via **CDK**
+(`infra/`) — nothing is created by hand. The image build/run are imperative operations
+driven by the scripts, reading the bucket/role from CDK outputs.
+
 ## Prerequisites
 
 - AWS creds in your shell (env vars / `AWS_PROFILE` / `aws sso login`) with permissions for
-  `lambda-microvms:*`, S3, IAM (for `setup-aws.sh`), and CloudWatch Logs read.
+  `lambda-microvms:*`, S3, IAM, CloudFormation, and CloudWatch Logs.
 - `GITHUB_PAT` in the repo-root `.env` (already set from Phase 1).
 - The `mayfly-spike` workflow already in `mikeng-io/mayfly-test` (from Phase 1's `setup-repo.sh`).
-- A GA MicroVM region — default `ap-northeast-1` (Tokyo).
+- A GA MicroVM region — default `ap-northeast-1` (Tokyo). Node + npm for CDK.
 
 ## Run
 
 ```bash
-cp config.env.example config.env    # fill AWS_REGION, S3_BUCKET, BUILD_ROLE_ARN
-./setup-aws.sh                      # optional: creates the bucket + build role, prints BUILD_ROLE_ARN
-./build-image.sh                    # zip app -> S3 -> create-microvm-image -> wait CREATED
-./run-spike-aws.sh                  # run-microvm -> hand JIT over L7 -> watch it run one job
+cp config.env.example config.env      # set AWS_REGION (+ IMAGE_NAME)
+
+cd infra
+npm install
+npx cdk bootstrap                     # once per account/region
+npm run deploy                        # creates bucket + build role -> ../cdk-outputs.json
+cd ..
+
+./build-image.sh                      # zip app -> S3 -> create-microvm-image -> wait CREATED
+./run-spike-aws.sh                    # run-microvm -> hand JIT over L7 -> watch it run one job
 ```
 
 `run-spike-aws.sh` terminates the MicroVM on exit (via a trap), so it won't linger and bill.
+
+## Teardown
+
+```bash
+cd infra && npm run destroy           # removes the bucket + role (nothing orphaned)
+```
 
 ## Pass criteria
 

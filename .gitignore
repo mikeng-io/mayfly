@@ -53,3 +53,4 @@ aws-exports.js
 # ---- spike local config / artifacts ----
 spike/**/config.env
 spike/**/*.zip
+spike/**/cdk-outputs.json

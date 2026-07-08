@@ -2,7 +2,12 @@
 # Build the Mayfly MicroVM image: zip app -> S3 -> create-microvm-image -> wait CREATED.
 set -euo pipefail
 cd "$(dirname "$0")"; source ./config.env
-: "${AWS_REGION:?}"; : "${S3_BUCKET:?}"; : "${BUILD_ROLE_ARN:?}"
+: "${AWS_REGION:?}"
+OUT=./cdk-outputs.json
+[ -f "$OUT" ] || { echo "[build] missing $OUT — deploy infra first: (cd infra && npm install && npm run deploy)"; exit 1; }
+S3_BUCKET=$(jq -r '.MayflySpikeStack.ArtifactBucketName' "$OUT")
+BUILD_ROLE_ARN=$(jq -r '.MayflySpikeStack.BuildRoleArn' "$OUT")
+: "${S3_BUCKET:?bucket from CDK outputs}"; : "${BUILD_ROLE_ARN:?role from CDK outputs}"
 IMAGE_NAME="${IMAGE_NAME:-mayfly-runner}"
 BASE_IMAGE_ARN="${BASE_IMAGE_ARN:-arn:aws:lambda:${AWS_REGION}:aws:microvm-image:al2023-1}"
 LM(){ aws lambda-microvms "$@" --region "$AWS_REGION"; }
