@@ -49,3 +49,7 @@ lib/**/*.js
 *.key
 aws-exports.js
 .aws/
+
+# ---- spike local config / artifacts ----
+spike/**/config.env
+spike/**/*.zip
