@@ -1,0 +1,14 @@
+name: mayfly-spike
+on:
+  workflow_dispatch:
+jobs:
+  smoke:
+    runs-on: [self-hosted, mayfly]
+    steps:
+      - name: Prove the runner ran a real job
+        run: |
+          echo "hello from a Mayfly runner"
+          echo "kernel:  $(uname -a)"
+          echo "user:    $(whoami)"
+          echo "date:    $(date -u)"
+          echo "runner:  ${RUNNER_NAME:-unknown}"
