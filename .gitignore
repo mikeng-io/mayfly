@@ -5,7 +5,8 @@
 *.dll
 *.so
 *.dylib
-bin/
+# NB: no blanket `bin/` — CDK apps keep source in bin/. Ignore Go build output
+# per-module (e.g. runtime/bin/) once those modules exist.
 dist/
 # Test / coverage
 *.test
