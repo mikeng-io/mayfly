@@ -1,0 +1,161 @@
+<style>
+  :root{
+    --ground:#f8f7f5; --panel:#ffffff; --panel-2:#f1efec; --ink:#181410;
+    --muted:#63594e; --faint:#938a7e; --border:#e4dfd8; --border-strong:#cfc7bc;
+    --ember:#c2521c; --ember-bg:#f6e7dd;
+    --ok:#3c7a3c; --ok-bg:#e0efe0;
+    --now:#9a6a15; --now-bg:#f4ead4;
+    --todo:#7a7266; --todo-bg:#ece8e2;
+    --vpc:#2f6f6a; --vpc-bg:#d9ecea;
+    --shadow:0 1px 2px rgba(24,20,16,.05),0 10px 28px rgba(24,20,16,.06);
+    --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --ground:#12100e; --panel:#1b1815; --panel-2:#151310; --ink:#efe9e2;
+    --muted:#a99e91; --faint:#776d61; --border:#2a2621; --border-strong:#3a352e;
+    --ember:#e87a3c; --ember-bg:#2a1a10; --ok:#5cb85c; --ok-bg:#12240f;
+    --now:#e0b24a; --now-bg:#251d0d; --todo:#8a8478; --todo-bg:#1c1a16;
+    --vpc:#48b3aa; --vpc-bg:#0f2624;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 14px 34px rgba(0,0,0,.4);
+  }}
+  :root[data-theme="light"]{
+    --ground:#f8f7f5; --panel:#ffffff; --panel-2:#f1efec; --ink:#181410; --muted:#63594e;
+    --faint:#938a7e; --border:#e4dfd8; --border-strong:#cfc7bc; --ember:#c2521c; --ember-bg:#f6e7dd;
+    --ok:#3c7a3c; --ok-bg:#e0efe0; --now:#9a6a15; --now-bg:#f4ead4; --todo:#7a7266; --todo-bg:#ece8e2;
+    --vpc:#2f6f6a; --vpc-bg:#d9ecea;
+    --shadow:0 1px 2px rgba(24,20,16,.05),0 10px 28px rgba(24,20,16,.06);
+  }
+  :root[data-theme="dark"]{
+    --ground:#12100e; --panel:#1b1815; --panel-2:#151310; --ink:#efe9e2; --muted:#a99e91;
+    --faint:#776d61; --border:#2a2621; --border-strong:#3a352e; --ember:#e87a3c; --ember-bg:#2a1a10;
+    --ok:#5cb85c; --ok-bg:#12240f; --now:#e0b24a; --now-bg:#251d0d; --todo:#8a8478; --todo-bg:#1c1a16;
+    --vpc:#48b3aa; --vpc-bg:#0f2624;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 14px 34px rgba(0,0,0,.4);
+  }
+
+  *{box-sizing:border-box;}
+  body{margin:0;}
+  .page{background:var(--ground);color:var(--ink);font-family:var(--sans);line-height:1.55;
+    -webkit-font-smoothing:antialiased;padding:clamp(20px,5vw,60px) clamp(16px,5vw,48px) 80px;}
+  .wrap{max-width:1000px;margin:0 auto;}
+
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--ember);margin:0 0 12px;}
+  h1{font-size:clamp(28px,5vw,42px);line-height:1.05;letter-spacing:-.02em;font-weight:840;margin:0 0 12px;text-wrap:balance;}
+  .lede{font-size:clamp(15px,2.2vw,18px);color:var(--muted);max-width:66ch;margin:0 0 18px;}
+  .lede b{color:var(--ink);font-weight:640;}
+
+  .legend{display:flex;flex-wrap:wrap;gap:14px;margin:0 0 4px;font-size:12.5px;color:var(--muted);}
+  .legend span{display:inline-flex;align-items:center;gap:7px;}
+  .badge{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.03em;padding:2px 7px;border-radius:5px;text-transform:uppercase;}
+  .b-ok{color:var(--ok);background:var(--ok-bg);}
+  .b-now{color:var(--now);background:var(--now-bg);}
+  .b-todo{color:var(--todo);background:var(--todo-bg);}
+
+  h2{font-family:var(--mono);font-size:12px;letter-spacing:.11em;text-transform:uppercase;color:var(--faint);
+    font-weight:600;margin:0 0 16px;padding-bottom:9px;border-bottom:1px solid var(--border);}
+  section{margin-top:44px;}
+
+  .arch{display:flex;flex-direction:column;gap:2px;}
+  .node{display:grid;grid-template-columns:160px 1fr auto;gap:14px;align-items:center;
+    border:1px solid var(--border);border-radius:11px;background:var(--panel);padding:12px 15px;box-shadow:var(--shadow);}
+  .node .k{font-family:var(--mono);font-size:11px;color:var(--ember);letter-spacing:.02em;text-transform:uppercase;}
+  .node .v{font-size:13.5px;color:var(--muted);}
+  .node .v b{color:var(--ink);font-weight:620;}
+  .node.ok{border-left:3px solid var(--ok);}
+  .node.now{border-left:3px solid var(--now);}
+  .node.todo{border-left:3px solid var(--border-strong);opacity:.92;}
+  .down{display:flex;justify-content:center;color:var(--faint);font-size:14px;padding:3px 0;}
+  @media(max-width:640px){.node{grid-template-columns:1fr;gap:5px;}.node .badge{justify-self:start;}}
+
+  .qbox{border:1px solid var(--now);background:var(--now-bg);border-radius:12px;padding:16px 18px;margin-bottom:18px;}
+  .qbox .lab{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--now);margin-bottom:6px;}
+  .qbox p{margin:0;font-size:15px;color:var(--ink);}
+  .qbox b{color:var(--now);}
+
+  .steps{display:flex;flex-direction:column;gap:2px;}
+  .step{display:grid;grid-template-columns:24px 1fr;gap:13px;padding:11px 0;border-bottom:1px solid var(--border);}
+  .step:last-child{border-bottom:0;}
+  .step .n{font-family:var(--mono);font-size:13px;color:var(--ember);font-weight:700;}
+  .step .b{font-size:14px;color:var(--muted);}
+  .step .b b{color:var(--ink);font-weight:620;}
+  .step code{font-family:var(--mono);font-size:12px;background:var(--panel-2);border:1px solid var(--border);border-radius:4px;padding:1px 5px;color:var(--ink);}
+  .cdk{display:inline-block;font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--vpc);background:var(--vpc-bg);border-radius:4px;padding:1px 6px;margin-left:4px;}
+
+  .pass{margin-top:16px;border:1px solid var(--ok);background:var(--ok-bg);border-radius:11px;padding:14px 16px;font-size:14px;color:var(--ink);}
+  .pass b{color:var(--ok);}
+
+  .ladder{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:6px;}
+  .rung{border:1px solid var(--border);border-radius:12px;background:var(--panel);padding:15px 16px;box-shadow:var(--shadow);}
+  .rung.ok{border-top:3px solid var(--ok);}
+  .rung.now{border-top:3px solid var(--now);}
+  .rung.todo{border-top:3px solid var(--border-strong);}
+  .rung .t{font-weight:700;font-size:14px;margin-bottom:4px;}
+  .rung.ok .t{color:var(--ok);} .rung.now .t{color:var(--now);}
+  .rung .d{font-size:12.5px;color:var(--muted);}
+  @media(max-width:640px){.ladder{grid-template-columns:1fr;}}
+
+  .foot{margin-top:44px;padding-top:16px;border-top:1px solid var(--border);font-family:var(--mono);font-size:12px;color:var(--faint);}
+</style>
+
+<div class="page">
+  <div class="wrap">
+
+    <p class="eyebrow">Mayfly · architecture &amp; Phase 2</p>
+    <h1>The architecture, and what Phase 2 proves</h1>
+    <p class="lede">Ephemeral GitHub Actions runners on Lambda MicroVMs. The <b>GitHub half is already proven</b> (Phase 1); Phase 2 tests the one thing only real AWS can answer — <b>does a MicroVM stay alive while a job runs</b> — before we build the rest.</p>
+    <div class="legend">
+      <span><i class="badge b-ok">✓ proven</i> validated by a passing spike</span>
+      <span><i class="badge b-now">◑ testing</i> Phase 2, now</span>
+      <span><i class="badge b-todo">○ later</i> built after the crux clears</span>
+    </div>
+
+    <section>
+      <h2>The target architecture</h2>
+      <div class="arch">
+        <div class="node ok"><span class="k">GitHub</span><span class="v"><code>workflow_job: queued</code> — a job labelled <code>mayfly</code> fires a webhook.</span><i class="badge b-ok">✓</i></div>
+        <div class="down">↓</div>
+        <div class="node todo"><span class="k">Webhook · Lambda</span><span class="v">Verify HMAC → filter queued+label → 2xx fast → enqueue.</span><i class="badge b-todo">○</i></div>
+        <div class="down">↓</div>
+        <div class="node todo"><span class="k">Queue · SQS</span><span class="v">Short delay; re-check job still queued before provisioning.</span><i class="badge b-todo">○</i></div>
+        <div class="down">↓</div>
+        <div class="node now"><span class="k">Control · Lambda</span><span class="v">Fork-check → <b>run/resume a MicroVM</b> → <b>hand the JIT config over its L7 endpoint.</b></span><i class="badge b-now">◑</i></div>
+        <div class="down">↓</div>
+        <div class="node now"><span class="k">Runner · MicroVM</span><span class="v"><b>Own kernel.</b> In-VM launcher takes the JIT config, runs <b>one</b> job, dials GitHub outbound, dies.</span><i class="badge b-now">◑</i></div>
+        <div class="down">↓</div>
+        <div class="node todo"><span class="k">Reconciler · EventBridge</span><span class="v">Sweeps leaked MicroVMs; refills pool; max-runtime cap. The SRE backbone.</span><i class="badge b-todo">○</i></div>
+      </div>
+      <p style="margin:14px 0 0;font-size:13px;color:var(--faint);">State + correlation <code style="font-family:var(--mono)">{jobId → microvmId → runnerName}</code> in <b style="color:var(--muted)">DynamoDB</b> <i class="badge b-todo" style="margin-left:4px">○</i> · auth via a <b style="color:var(--muted)">GitHub App</b>. The green rows are what Phase 1 already proved (JIT hand-off, in-VM launcher, ephemeral single-job run).</p>
+    </section>
+
+    <section>
+      <h2>What Phase 2 does</h2>
+      <div class="qbox">
+        <div class="lab">The make-or-break question</div>
+        <p>Does a real Lambda MicroVM <b>stay RUNNING</b> while the runner long-polls GitHub (outbound) and executes a job — handed its JIT config over the real <b>L7 endpoint</b> (<code style="font-family:var(--mono)">X-aws-proxy-auth</code>)? <br><span style="font-size:13px;color:var(--muted)">Docs say auto-suspend follows <em>inbound</em> traffic; the runner is outbound, so we tune the idle policy and confirm empirically.</span></p>
+      </div>
+      <div class="steps">
+        <div class="step"><span class="n">1</span><span class="b"><b>CDK deploy</b> the S3 artifact bucket + IAM build role. <span class="cdk">all resources via CDK · destroyable</span></span></div>
+        <div class="step"><span class="n">2</span><span class="b"><b>Build image:</b> zip the app (launcher + Dockerfile) → S3 → <code>create-microvm-image</code> → wait <code>CREATED</code>.</span></div>
+        <div class="step"><span class="n">3</span><span class="b"><code>run-microvm</code> with the idle policy tuned <b>not to auto-suspend mid-job</b>; wait for <code>RUNNING</code>.</span></div>
+        <div class="step"><span class="n">4</span><span class="b"><code>create-microvm-auth-token</code> → <b>POST the JIT config to the MicroVM endpoint</b> (<code>X-aws-proxy-auth</code>, port 8080).</span></div>
+        <div class="step"><span class="n">5</span><span class="b">Dispatch the workflow → the runner inside picks up the one job.</span></div>
+        <div class="step"><span class="n">6</span><span class="b"><b>Watch:</b> poll the MicroVM state vs. the job — does it stay <code>RUNNING</code> the whole time?</span></div>
+        <div class="step"><span class="n">7</span><span class="b"><code>terminate-microvm</code> (automatic on exit — nothing lingers, few cents).</span></div>
+      </div>
+      <div class="pass"><b>PASS =</b> MicroVM stays <code style="font-family:var(--mono)">RUNNING</code> throughout &nbsp;+&nbsp; workflow conclusion <code style="font-family:var(--mono)">success</code> &nbsp;+&nbsp; launcher <code style="font-family:var(--mono)">/status</code> reports <code style="font-family:var(--mono)">done:true, code:0</code>.</div>
+    </section>
+
+    <section>
+      <h2>The validation ladder</h2>
+      <div class="ladder">
+        <div class="rung ok"><div class="t">Phase 1 · PASS</div><div class="d">The GitHub half — JIT config → in-VM launcher over HTTP → one real job to clean exit. <b>Done, in a container.</b></div></div>
+        <div class="rung now"><div class="t">Phase 2 · now</div><div class="d">The MicroVM half — does it stay alive during the job on real AWS, over the real L7 endpoint. <b>The last unknown.</b></div></div>
+        <div class="rung todo"><div class="t">Then · build</div><div class="d">If Phase 2 clears: the webhook, SQS, control plane, reconciler, DynamoDB — the real system, in CDK.</div></div>
+      </div>
+    </section>
+
+    <p class="foot">Mayfly · spike/phase2-aws · all resources CDK-managed, MicroVM auto-terminated on exit</p>
+
+  </div>
+</div>
