@@ -22,10 +22,19 @@
 - *HAZARD run created no MicroVM (param error: idle min is 60s, not 45).*
 - *`mayfly-diag` image still exists → delete when done (teardown checklist).*
 
-## RESULT — Unknown #2: RESOLVED ✅
-SAFE run: MicroVM stayed **RUNNING** t=10→140s while a real GHA job (120s sleep) ran to
-**completed/success**, fed via the L7 endpoint (`health 200`, `jit 202`). A real Lambda MicroVM
-holds a runner through a job when auto-suspend is off — the design config works.
+## RESULTS ✅
+
+**Phase 2 — Unknown #2 RESOLVED.** SAFE run: MicroVM stayed **RUNNING** t=10→140s while a real GHA
+job (120s sleep) ran to **completed/success**, via the L7 endpoint (`health 200`, `jit 202`). A real
+Lambda MicroVM holds a runner through a job when auto-suspend is off.
+
+**Phase 2b — Docker-in-MicroVM WORKS (first try).** `dockerd` ran inside the MicroVM
+(`additionalOsCapabilities=ALL`); the job did `docker version` (linux/arm64), `docker run hello-world`,
+`docker build` (Successfully tagged mayfly-test), and ran the built image → **completed/success**.
+Arch = **aarch64 (ARM64/Graviton)** — native ARM builds; x86 needs buildx+QEMU.
+
+**Live compute: none** — both MicroVMs (`0abca5c5`, `42f6c4c2`) TERMINATED. Two images remain
+(`mayfly-diag`, `mayfly-docker`) = tiny snapshot storage → delete on teardown.
 
 ## Read-only calls so far (no resources)
 - `sts get-caller-identity` — verified identity.
