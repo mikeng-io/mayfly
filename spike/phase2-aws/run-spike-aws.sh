@@ -11,14 +11,15 @@
 #
 # The only endpoint traffic is the one-time JIT hand-off (unavoidable — that's
 # how the config gets in). After that, observation is control-plane only.
-set -uo pipefail
-cd "$(dirname "$0")"; source ./config.env
-set -a; . ../../.env; set +a
+set -o pipefail   # NB: not -u — the two-run flow has intentionally-optional vars
+cd "$(dirname "$0")"
+set -a; . ../../.env; set +a      # AWS creds + GITHUB_PAT (NB: .env may set a default region)
+source ./config.env               # config.env AWS_REGION (Tokyo) MUST win over .env's default
 : "${AWS_REGION:?}"; : "${GITHUB_PAT:?}"
 IMAGE_NAME="${IMAGE_NAME:-mayfly-runner}"
 OWNER=mikeng-io; REPO=mayfly-test; WF=mayfly-spike.yml
 JOB_SLEEP="${JOB_SLEEP:-120}"          # job sleeps this long
-HAZARD_IDLE="${HAZARD_IDLE:-45}"       # hazard idle window (< JOB_SLEEP so it can suspend mid-job)
+HAZARD_IDLE="${HAZARD_IDLE:-60}"       # hazard idle window (min 60 per API; < JOB_SLEEP so it can suspend mid-job)
 GH=https://api.github.com
 GA=(-H "Authorization: Bearer $GITHUB_PAT" -H "X-GitHub-Api-Version: 2022-11-28")
 LM(){ aws lambda-microvms "$@" --region "$AWS_REGION"; }
@@ -27,12 +28,13 @@ CURL=(curl -s --connect-timeout 10 --max-time 30)
 
 [ "$HAZARD_IDLE" -lt "$JOB_SLEEP" ] || { echo "HAZARD_IDLE must be < JOB_SLEEP to test suspend-mid-job"; exit 1; }
 
-IMAGE_ARN=$(LM get-microvm-image --image-identifier "$IMAGE_NAME" --query imageArn --output text 2>/dev/null) \
-  || { echo "[cp] no image '$IMAGE_NAME' — run ./build-image.sh first"; exit 1; }
+# get-microvm-image requires the full ARN, so resolve name -> ARN via list.
+IMAGE_ARN=$(LM list-microvm-images --query "items[?name=='$IMAGE_NAME'].imageArn | [0]" --output text 2>/dev/null)
+[ -n "$IMAGE_ARN" ] && [ "$IMAGE_ARN" != None ] || { echo "[cp] no image '$IMAGE_NAME' — run ./build-image.sh first"; exit 1; }
 echo "[cp] image: $IMAGE_ARN   job_sleep=${JOB_SLEEP}s  hazard_idle=${HAZARD_IDLE}s"
 
 CUR_MVM=""
-cleanup(){ if [ -n "$CUR_MVM" ]; then echo "[cp] terminating $CUR_MVM…"; LM terminate-microvm --microvm-identifier "$CUR_MVM" >/dev/null 2>&1 || true; CUR_MVM=""; fi; }
+cleanup(){ if [ -n "${CUR_MVM:-}" ]; then echo "[cp] terminating $CUR_MVM…"; LM terminate-microvm --microvm-identifier "$CUR_MVM" >/dev/null 2>&1 || true; CUR_MVM=""; fi; }
 trap cleanup EXIT INT TERM
 
 HAZARD_RESULT=""; SAFE_RESULT=""

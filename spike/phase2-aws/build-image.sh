@@ -2,8 +2,9 @@
 # Build/update the Mayfly MicroVM image: zip app -> S3 -> (create|update)-microvm-image
 # -> wait for image CREATED|UPDATED AND version SUCCESSFUL.
 set -euo pipefail
-cd "$(dirname "$0")"; source ./config.env
-set -a; . ../../.env; set +a   # AWS creds from repo-root .env (region comes from config.env via --region)
+cd "$(dirname "$0")"
+set -a; . ../../.env; set +a   # AWS creds (NB: .env may set a default region)
+source ./config.env            # config.env AWS_REGION (Tokyo) MUST win over .env's default
 : "${AWS_REGION:?}"
 OUT=./cdk-outputs.json
 [ -f "$OUT" ] || { echo "[build] missing $OUT — deploy infra first: (cd infra && npm install && npm run deploy)"; exit 1; }

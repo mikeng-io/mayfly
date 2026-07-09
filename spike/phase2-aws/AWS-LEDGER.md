@@ -11,8 +11,18 @@
 |---|------|----------|-----------|-----------|----------------|
 | 1 | 15:31 JST | **CDKToolkit** CFN stack, ap-northeast-1 (staging S3 bucket, ECR repo, IAM roles) | `cdk bootstrap aws://163703054402/ap-northeast-1` | ~$0 (empty) | delete the `CDKToolkit` CloudFormation stack (or keep — standard CDK) |
 | 2 | 15:33 JST | **MayflySpikeStack** CFN stack: S3 bucket `mayflyspikestack-artifactbucket7410c9ef-zn44dfsrfsja` + IAM role `MayflySpikeStack-MicrovmBuildRoleA8840453-sx3Z9kGH6uQg` + an auto-delete Lambda | `cdk deploy` | ~$0 | `cd infra && npm run destroy` |
-| — | pending | MicroVM **image** `mayfly-runner` | `build-image.sh` (needs new CLI) | snapshot storage | `lambda-microvms delete-microvm-image` |
-| — | pending | MicroVM **runs** ×2 (hazard, safe) | `run-spike-aws.sh` (needs new CLI) | a few ¢ | auto-terminated on exit |
+| 3 | 17:02 JST | MicroVM **image** `mayfly-diag` (arn:…:microvm-image:mayfly-diag) — building | `aws lambda-microvms create-microvm-image` (no --hooks; the --hooks shorthand caused a bogus 403) | snapshot storage | `aws lambda-microvms delete-microvm-image --image-identifier mayfly-diag --region ap-northeast-1` |
+| 4 | 17:3x JST | MicroVM **run** `microvm-0abca5c5-9571-3ac8-a466-75c660cc8a96` (SAFE experiment) — **terminated** | `run-spike-aws.sh` | ~few ¢ | already terminated (manually — a `set -u` bug skipped the auto-terminate; killed via `terminate-microvm`) |
+
+*Notes:*
+- *`mayfly-runner` image was NOT created (the --hooks call 403'd before creating anything). Only `mayfly-diag` exists.*
+- *HAZARD run created no MicroVM (param error: idle min is 60s, not 45).*
+- *`mayfly-diag` image still exists → delete when done (teardown checklist).*
+
+## RESULT — Unknown #2: RESOLVED ✅
+SAFE run: MicroVM stayed **RUNNING** t=10→140s while a real GHA job (120s sleep) ran to
+**completed/success**, fed via the L7 endpoint (`health 200`, `jit 202`). A real Lambda MicroVM
+holds a runner through a job when auto-suspend is off — the design config works.
 
 ## Read-only calls so far (no resources)
 - `sts get-caller-identity` — verified identity.
