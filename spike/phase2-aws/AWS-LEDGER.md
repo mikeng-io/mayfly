@@ -51,9 +51,13 @@ lockfile npm optional-deps bug — is ecosystem-level, not Mayfly-specific).
 - MicroVM **image** → snapshot storage (~$0.08/GB-month) while it exists → **delete after**.
 - MicroVM **runs** → 2 short runs (hazard + safe, ~4–5 min each) → a few cents; auto-terminated on exit.
 
-## Teardown checklist (run when done)
-- [ ] `terminate-microvm` any running/suspended MicroVMs (`lambda-microvms list-microvms`)
-- [ ] delete the MicroVM image (snapshot storage) — `lambda-microvms delete-microvm-image`
-- [ ] `cd infra && npm run destroy` (removes the spike bucket + role)
-- [ ] (optional) delete the CDKToolkit stack if you don't want CDK bootstrapped in Tokyo
-- [ ] rotate the GitHub PAT (fragment was pasted in chat)
+## Teardown — DONE 2026-07-09 ✅
+- [x] All MicroVMs terminated (none live)
+- [x] MicroVM images `mayfly-diag` + `mayfly-docker` deleted (none remain)
+- [x] `MayflySpikeStack` destroyed via `cdk destroy` (bucket + role + auto-delete Lambda gone)
+- [ ] **`CDKToolkit` stack left intentionally** (standard CDK bootstrap in Tokyo, ~$0, reusable) —
+      delete only if you don't want CDK bootstrapped there
+- [ ] **rotate the GitHub PAT** (a fragment was pasted in chat) — still pending
+
+**Net AWS footprint now ≈ $0** (only the empty CDKToolkit bootstrap remains). The whole project is
+redeployable from code: `cd infra && npm run deploy` → `build-image.sh` → `run-*.sh`.
