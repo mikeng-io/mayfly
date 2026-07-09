@@ -77,6 +77,11 @@ test('the control Lambda has a reserved-concurrency cap and an SQS event source'
   t.resourceCountIs('AWS::Lambda::EventSourceMapping', 1);
 });
 
+test('a reconciler runs on a 2-minute schedule', () => {
+  const t = synth();
+  t.hasResourceProperties('AWS::Events::Rule', { ScheduleExpression: 'rate(2 minutes)' });
+});
+
 test('the control role has least-privilege lambda-microvms actions (not a wildcard)', () => {
   const t = synth();
   t.hasResourceProperties('AWS::IAM::Policy', {

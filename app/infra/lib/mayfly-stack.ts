@@ -11,6 +11,8 @@ import * as cwActions from 'aws-cdk-lib/aws-cloudwatch-actions';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import { SqsEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
+import * as events from 'aws-cdk-lib/aws-events';
+import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import { NagSuppressions } from 'cdk-nag';
 
@@ -59,6 +61,7 @@ export class MayflyStack extends Stack {
   readonly webhookFn: NodejsFunction;
   readonly webhookUrl: lambda.FunctionUrl;
   readonly controlFn: NodejsFunction;
+  readonly reconcilerFn: NodejsFunction;
 
   constructor(scope: Construct, id: string, props?: MayflyStackProps) {
     super(scope, id, props);
@@ -208,6 +211,32 @@ export class MayflyStack extends Stack {
       new iam.PolicyStatement({ actions: MICROVM_ACTIONS, resources: ['*'] }),
     );
 
+    // --- Reconciler Lambda + scheduled sweep (record-driven, account-safe) ---
+    this.reconcilerFn = new NodejsFunction(this, 'ReconcilerFn', {
+      entry: path.join(HANDLERS_DIR, 'reconciler.ts'),
+      handler: 'handler',
+      runtime: lambda.Runtime.NODEJS_20_X,
+      architecture: lambda.Architecture.ARM_64,
+      memorySize: 256,
+      timeout: Duration.seconds(120),
+      environment: commonEnv,
+      bundling,
+      projectRoot: APP_ROOT,
+      depsLockFilePath: DEPS_LOCK,
+    });
+    this.jobsTable.grantReadWriteData(this.reconcilerFn);
+    this.reconcilerFn.addToRolePolicy(
+      new iam.PolicyStatement({ actions: MICROVM_ACTIONS, resources: ['*'] }),
+    );
+    this.reconcilerFn.addToRolePolicy(
+      new iam.PolicyStatement({ actions: ['cloudwatch:PutMetricData'], resources: ['*'] }),
+    );
+
+    new events.Rule(this, 'ReconcilerSchedule', {
+      schedule: events.Schedule.rate(Duration.minutes(2)),
+      targets: [new targets.LambdaFunction(this.reconcilerFn)],
+    });
+
     this.applyNagSuppressions();
   }
 
@@ -228,17 +257,19 @@ export class MayflyStack extends Stack {
         ],
       },
     ]);
-    NagSuppressions.addResourceSuppressions(
-      this.controlFn,
-      [
-        {
-          id: 'AwsSolutions-IAM5',
-          reason:
-            'lambda-microvms actions target MicroVM/image ids created at runtime that cannot be enumerated at deploy time (restricted to the 7 required actions, never :*); the DynamoDB grant includes the table GSI (index/*). Both reviewed as least-privilege for v1.',
-        },
-      ],
-      true,
-    );
+    for (const fn of [this.controlFn, this.reconcilerFn]) {
+      NagSuppressions.addResourceSuppressions(
+        fn,
+        [
+          {
+            id: 'AwsSolutions-IAM5',
+            reason:
+              'lambda-microvms actions (and cloudwatch:PutMetricData) target resources created at runtime that cannot be enumerated at deploy time (restricted to the required actions, never :*); the DynamoDB grant includes the table GSI (index/*). Reviewed as least-privilege for v1.',
+          },
+        ],
+        true,
+      );
+    }
     NagSuppressions.addResourceSuppressions(this.deadLetterQueue, [
       { id: 'AwsSolutions-SQS3', reason: 'This queue IS the dead-letter queue; it does not need its own DLQ.' },
     ]);
