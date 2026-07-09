@@ -23,7 +23,7 @@ export interface JobsRepoOptions {
 export interface JobsRepo {
   beginProvisioning(jobId: string, runId: number): Promise<'proceed' | 'skip'>;
   attachMicrovm(jobId: string, microvmId: string, endpoint: string): Promise<void>;
-  markRunning(jobId: string, runnerName?: string): Promise<void>;
+  markRunning(jobId: string, runnerName?: string, trust?: 'internal' | 'fork'): Promise<void>;
   getJob(jobId: string): Promise<JobRecord | undefined>;
   deleteJob(jobId: string): Promise<void>;
   listByState(state: JobState): Promise<JobRecord[]>;
@@ -89,12 +89,16 @@ export function createJobsRepo(opts: JobsRepoOptions): JobsRepo {
       );
     },
 
-    async markRunning(jobId, runnerName) {
+    async markRunning(jobId, runnerName, trust) {
       const values: Record<string, unknown> = { ':r': 'running', ':t': now() };
       let expr = 'SET #s = :r, updatedAt = :t';
       if (runnerName) {
         expr += ', runnerName = :n';
         values[':n'] = runnerName;
+      }
+      if (trust) {
+        expr += ', trust = :tr';
+        values[':tr'] = trust;
       }
       await db.send(
         new UpdateCommand({

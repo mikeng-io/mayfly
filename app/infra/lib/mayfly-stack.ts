@@ -10,7 +10,20 @@ import * as cw from 'aws-cdk-lib/aws-cloudwatch';
 import * as cwActions from 'aws-cdk-lib/aws-cloudwatch-actions';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
+import { SqsEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import { NagSuppressions } from 'cdk-nag';
+
+/** Least-privilege lambda-microvms actions the control plane needs (never `:*`). */
+const MICROVM_ACTIONS = [
+  'lambda-microvms:RunMicrovm',
+  'lambda-microvms:TerminateMicrovm',
+  'lambda-microvms:GetMicrovm',
+  'lambda-microvms:ListMicrovms',
+  'lambda-microvms:ListMicrovmImages',
+  'lambda-microvms:GetMicrovmImage',
+  'lambda-microvms:CreateMicrovmAuthToken',
+];
 
 /** Target repo + runner labels + image name. Overridable per-deploy; sane v1 defaults. */
 export interface MayflyStackProps extends StackProps {
@@ -45,6 +58,7 @@ export class MayflyStack extends Stack {
   readonly alarmTopic: sns.Topic;
   readonly webhookFn: NodejsFunction;
   readonly webhookUrl: lambda.FunctionUrl;
+  readonly controlFn: NodejsFunction;
 
   constructor(scope: Construct, id: string, props?: MayflyStackProps) {
     super(scope, id, props);
@@ -171,6 +185,29 @@ export class MayflyStack extends Stack {
       authType: lambda.FunctionUrlAuthType.NONE,
     });
 
+    // --- Control Lambda: SQS consumer that provisions/reaps MicroVMs ---
+    this.controlFn = new NodejsFunction(this, 'ControlFn', {
+      entry: path.join(HANDLERS_DIR, 'control.ts'),
+      handler: 'handler',
+      runtime: lambda.Runtime.NODEJS_20_X,
+      architecture: lambda.Architecture.ARM_64,
+      memorySize: 512,
+      timeout: Duration.seconds(180), // < queue visibility (300s) so a crash redelivers
+      // Cap concurrent provisions so a matrix job can't blow past the ~5 TPS RunMicrovm limit.
+      reservedConcurrentExecutions: 5,
+      environment: { ...commonEnv, MAX_CONCURRENT: '5' },
+      bundling,
+      projectRoot: APP_ROOT,
+      depsLockFilePath: DEPS_LOCK,
+    });
+    this.controlFn.addEventSource(new SqsEventSource(this.queue, { batchSize: 1 }));
+    this.jobsTable.grantReadWriteData(this.controlFn);
+    this.appIdParam.grantRead(this.controlFn);
+    this.appPrivateKey.grantRead(this.controlFn);
+    this.controlFn.addToRolePolicy(
+      new iam.PolicyStatement({ actions: MICROVM_ACTIONS, resources: ['*'] }),
+    );
+
     this.applyNagSuppressions();
   }
 
@@ -191,6 +228,17 @@ export class MayflyStack extends Stack {
         ],
       },
     ]);
+    NagSuppressions.addResourceSuppressions(
+      this.controlFn,
+      [
+        {
+          id: 'AwsSolutions-IAM5',
+          reason:
+            'lambda-microvms actions target MicroVM/image ids created at runtime that cannot be enumerated at deploy time (restricted to the 7 required actions, never :*); the DynamoDB grant includes the table GSI (index/*). Both reviewed as least-privilege for v1.',
+        },
+      ],
+      true,
+    );
     NagSuppressions.addResourceSuppressions(this.deadLetterQueue, [
       { id: 'AwsSolutions-SQS3', reason: 'This queue IS the dead-letter queue; it does not need its own DLQ.' },
     ]);

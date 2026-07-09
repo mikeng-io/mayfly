@@ -70,3 +70,22 @@ test('a webhook Lambda with a public (HMAC-authed) Function URL exists', () => {
     Architectures: ['arm64'],
   });
 });
+
+test('the control Lambda has a reserved-concurrency cap and an SQS event source', () => {
+  const t = synth();
+  t.hasResourceProperties('AWS::Lambda::Function', { ReservedConcurrentExecutions: 5 });
+  t.resourceCountIs('AWS::Lambda::EventSourceMapping', 1);
+});
+
+test('the control role has least-privilege lambda-microvms actions (not a wildcard)', () => {
+  const t = synth();
+  t.hasResourceProperties('AWS::IAM::Policy', {
+    PolicyDocument: {
+      Statement: Match.arrayWith([
+        Match.objectLike({
+          Action: Match.arrayWith(['lambda-microvms:RunMicrovm', 'lambda-microvms:TerminateMicrovm']),
+        }),
+      ]),
+    },
+  });
+});

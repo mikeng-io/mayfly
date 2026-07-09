@@ -1,0 +1,149 @@
+import { loadConfig, getSecret, getSecretsManagerValue } from '../lib/config';
+import { createJobsRepo, type JobsRepo } from '../lib/jobs';
+import { createMicrovmClient, type MicrovmClient } from '../lib/microvm';
+import {
+  appJwt,
+  installationToken,
+  generateJitConfig,
+  getRun,
+  isForkPR,
+  type RunInfo,
+} from '../lib/github';
+import type { ControlMessage } from '../lib/types';
+
+/** How long a completed/abandoned record lingers (DynamoDB TTL) — well past max runtime. */
+const RECORD_TTL_SECONDS = 24 * 60 * 60;
+
+export interface GithubApi {
+  appJwt: typeof appJwt;
+  installationToken: typeof installationToken;
+  generateJitConfig: typeof generateJitConfig;
+  getRun: typeof getRun;
+  isForkPR: typeof isForkPR;
+}
+
+export interface ControlDeps {
+  jobs: JobsRepo;
+  microvm: MicrovmClient;
+  github: GithubApi;
+  loadAppCreds: () => Promise<{ appId: string; privateKey: string }>;
+  imageName: string;
+  sleep?: (ms: number) => Promise<void>;
+  retries?: number;
+}
+
+const isThrottle = (e: unknown): boolean =>
+  /Throttl|TooManyRequests|RequestLimit/i.test((e as { name?: string }).name ?? '');
+
+/** Retry RunMicrovm (which is TPS-limited ~5/s) on throttling with jittered backoff. */
+async function withThrottleRetry<T>(
+  fn: () => Promise<T>,
+  attempts: number,
+  sleep: (ms: number) => Promise<void>,
+  jobId: string,
+): Promise<T> {
+  let delay = 200;
+  for (let i = 0; ; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      if (i >= attempts - 1 || !isThrottle(e)) throw e;
+      // Deterministic-ish jitter from the jobId so tests don't need Math.random.
+      const jitter = (jobId.length * 37) % 100;
+      await sleep(delay + jitter);
+      delay *= 2;
+    }
+  }
+}
+
+async function provision(msg: Extract<ControlMessage, { type: 'provision' }>, deps: ControlDeps): Promise<void> {
+  // 1. Re-drivable idempotency claim. "skip" = SQS redelivery / already handled.
+  if ((await deps.jobs.beginProvisioning(msg.jobId, msg.runId)) === 'skip') return;
+
+  // 2. Auth + re-check the run is still queued (handles completed-before-provision).
+  const { appId, privateKey } = await deps.loadAppCreds();
+  const jwt = deps.github.appJwt(appId, privateKey);
+  const token = await deps.github.installationToken(jwt, msg.installationId);
+
+  let run: RunInfo | undefined;
+  let getRunFailed = false;
+  try {
+    run = await deps.github.getRun(token, msg.owner, msg.repo, msg.runId);
+  } catch {
+    getRunFailed = true;
+  }
+  if (run && run.status !== 'queued') {
+    await deps.jobs.deleteJob(msg.jobId);
+    return;
+  }
+
+  // 3. Fork-check, FAIL-CLOSED: trust is "internal" only if we positively confirmed a
+  //    non-fork run; any failure/uncertainty => "fork". v1 records trust; the VPC-SG
+  //    network gate is a documented post-v1 deferral.
+  const trust: 'internal' | 'fork' =
+    !getRunFailed && run && !deps.github.isForkPR(run) ? 'internal' : 'fork';
+
+  // 4. Launch, and record the microvmId IMMEDIATELY so a redelivery/reconciler can reap it.
+  const imageArn = await deps.microvm.imageArn(deps.imageName);
+  const sleep = deps.sleep ?? ((ms) => new Promise<void>((r) => setTimeout(r, ms)));
+  const { microvmId, endpoint } = await withThrottleRetry(
+    () => deps.microvm.runMicrovm(imageArn, msg.jobId),
+    deps.retries ?? 4,
+    sleep,
+    msg.jobId,
+  );
+  await deps.jobs.attachMicrovm(msg.jobId, microvmId, endpoint);
+
+  // 5. Everything past here can leak the VM on failure -> terminate in the catch.
+  try {
+    await deps.microvm.waitRunning(microvmId);
+    const auth = await deps.microvm.authToken(microvmId);
+    const runnerName = `mayfly-${msg.jobId}`;
+    const jit = await deps.github.generateJitConfig(token, msg.owner, msg.repo, runnerName, msg.labels);
+    await deps.microvm.postJit(endpoint, auth, jit);
+    await deps.jobs.markRunning(msg.jobId, runnerName, trust);
+  } catch (e) {
+    await deps.microvm.terminate(microvmId);
+    throw e; // surface to SQS: retry, then DLQ
+  }
+}
+
+async function teardown(msg: Extract<ControlMessage, { type: 'teardown' }>, deps: ControlDeps): Promise<void> {
+  const rec = await deps.jobs.getJob(msg.jobId);
+  if (rec?.microvmId) await deps.microvm.terminate(rec.microvmId);
+  await deps.jobs.deleteJob(msg.jobId);
+}
+
+/** Process one control message (exported for unit tests). */
+export async function processMessage(msg: ControlMessage, deps: ControlDeps): Promise<void> {
+  if (msg.type === 'provision') return provision(msg, deps);
+  if (msg.type === 'teardown') return teardown(msg, deps);
+}
+
+function buildDeps(): ControlDeps {
+  const cfg = loadConfig();
+  return {
+    jobs: createJobsRepo({
+      table: cfg.jobsTable,
+      stateIndex: cfg.jobsStateIndex,
+      provisionTtlSeconds: cfg.provisionTtlSeconds,
+      recordTtlSeconds: RECORD_TTL_SECONDS,
+      region: cfg.region,
+    }),
+    microvm: createMicrovmClient({ region: cfg.region, maxRuntimeSeconds: cfg.maxRuntimeSeconds }),
+    github: { appJwt, installationToken, generateJitConfig, getRun, isForkPR },
+    loadAppCreds: async () => ({
+      appId: await getSecret(cfg.appIdParam),
+      privateKey: await getSecretsManagerValue(cfg.appKeyParam),
+    }),
+    imageName: cfg.imageName,
+  };
+}
+
+/** SQS event source handler (batchSize 1). */
+export async function handler(event: { Records: { body: string }[] }): Promise<void> {
+  const deps = buildDeps();
+  for (const record of event.Records) {
+    await processMessage(JSON.parse(record.body) as ControlMessage, deps);
+  }
+}

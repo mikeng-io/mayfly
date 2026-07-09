@@ -1,4 +1,5 @@
 import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
+import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 
 export interface Config {
   region: string;
@@ -55,5 +56,16 @@ export async function getSecret(param: string, region?: string): Promise<string>
   const res = await ssm.send(new GetParameterCommand({ Name: param, WithDecryption: true }));
   const value = res.Parameter?.Value;
   if (!value) throw new Error(`SSM parameter empty or missing: ${param}`);
+  return value;
+}
+
+let secretsManager: SecretsManagerClient | undefined;
+
+/** Resolve a Secrets Manager secret value (e.g. the GitHub App private key). */
+export async function getSecretsManagerValue(nameOrArn: string, region?: string): Promise<string> {
+  secretsManager ??= new SecretsManagerClient({ region: region ?? process.env.MAYFLY_REGION });
+  const res = await secretsManager.send(new GetSecretValueCommand({ SecretId: nameOrArn }));
+  const value = res.SecretString;
+  if (!value) throw new Error(`Secrets Manager secret empty or missing: ${nameOrArn}`);
   return value;
 }
