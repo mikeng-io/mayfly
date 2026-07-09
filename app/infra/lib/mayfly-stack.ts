@@ -1,5 +1,6 @@
 import { Stack, StackProps, RemovalPolicy, Duration } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
+import * as path from 'node:path';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
@@ -7,7 +8,21 @@ import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as sns from 'aws-cdk-lib/aws-sns';
 import * as cw from 'aws-cdk-lib/aws-cloudwatch';
 import * as cwActions from 'aws-cdk-lib/aws-cloudwatch-actions';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
+import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import { NagSuppressions } from 'cdk-nag';
+
+/** Target repo + runner labels + image name. Overridable per-deploy; sane v1 defaults. */
+export interface MayflyStackProps extends StackProps {
+  imageName?: string;
+  repoOwner?: string;
+  repoName?: string;
+  labels?: string[];
+}
+
+const APP_ROOT = path.join(__dirname, '..', '..');
+const HANDLERS_DIR = path.join(APP_ROOT, 'src', 'handlers');
+const DEPS_LOCK = path.join(APP_ROOT, 'package-lock.json');
 
 /** Custom-metric namespace emitted by the reconciler (Task 11). */
 export const METRIC_NAMESPACE = 'Mayfly';
@@ -28,9 +43,16 @@ export class MayflyStack extends Stack {
   readonly installationIdParam: ssm.StringParameter;
   readonly appPrivateKey: secretsmanager.Secret;
   readonly alarmTopic: sns.Topic;
+  readonly webhookFn: NodejsFunction;
+  readonly webhookUrl: lambda.FunctionUrl;
 
-  constructor(scope: Construct, id: string, props?: StackProps) {
+  constructor(scope: Construct, id: string, props?: MayflyStackProps) {
     super(scope, id, props);
+
+    const imageName = props?.imageName ?? 'mayfly-runner';
+    const repoOwner = props?.repoOwner ?? 'mikeng-io';
+    const repoName = props?.repoName ?? 'mayfly-test';
+    const labels = props?.labels ?? ['self-hosted', 'mayfly'];
 
     // --- State: correlation table (PK jobId) + GSI on state for the reconciler ---
     this.jobsTable = new dynamodb.Table(this, 'JobsTable', {
@@ -113,11 +135,62 @@ export class MayflyStack extends Stack {
     });
     reclaimAlarm.addAlarmAction(new cwActions.SnsAction(this.alarmTopic));
 
+    // --- Shared Lambda config ---
+    const commonEnv: Record<string, string> = {
+      MAYFLY_REGION: this.region,
+      IMAGE_NAME: imageName,
+      JOBS_TABLE: this.jobsTable.tableName,
+      JOBS_STATE_INDEX: JOBS_STATE_INDEX,
+      QUEUE_URL: this.queue.queueUrl,
+      REPO_OWNER: repoOwner,
+      REPO_NAME: repoName,
+      LABELS: labels.join(','),
+      WEBHOOK_SECRET_PARAM: this.webhookSecretParam.parameterName,
+      APP_ID_PARAM: this.appIdParam.parameterName,
+      APP_KEY_PARAM: this.appPrivateKey.secretName,
+    };
+    const bundling = { minify: true, sourceMap: true, target: 'node20' };
+
+    // --- Webhook Lambda + Function URL (auth NONE; HMAC is the auth) ---
+    this.webhookFn = new NodejsFunction(this, 'WebhookFn', {
+      entry: path.join(HANDLERS_DIR, 'webhook.ts'),
+      handler: 'handler',
+      runtime: lambda.Runtime.NODEJS_20_X,
+      architecture: lambda.Architecture.ARM_64,
+      memorySize: 256,
+      timeout: Duration.seconds(10),
+      environment: commonEnv,
+      bundling,
+      projectRoot: APP_ROOT,
+      depsLockFilePath: DEPS_LOCK,
+    });
+    this.queue.grantSendMessages(this.webhookFn);
+    this.webhookSecretParam.grantRead(this.webhookFn);
+
+    this.webhookUrl = this.webhookFn.addFunctionUrl({
+      authType: lambda.FunctionUrlAuthType.NONE,
+    });
+
     this.applyNagSuppressions();
   }
 
   /** Documented v1 cdk-nag suppressions. */
   private applyNagSuppressions(): void {
+    NagSuppressions.addStackSuppressions(this, [
+      {
+        id: 'AwsSolutions-L1',
+        reason:
+          'Node 20.x is a current, supported LTS Lambda runtime standardized across Mayfly; runtime bumps are tracked as a separate maintenance task.',
+      },
+      {
+        id: 'AwsSolutions-IAM4',
+        reason:
+          'CloudWatch Logs delivery via the AWS-managed AWSLambdaBasicExecutionRole; this is the least-privilege standard for Lambda logging.',
+        appliesTo: [
+          'Policy::arn:<AWS::Partition>:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole',
+        ],
+      },
+    ]);
     NagSuppressions.addResourceSuppressions(this.deadLetterQueue, [
       { id: 'AwsSolutions-SQS3', reason: 'This queue IS the dead-letter queue; it does not need its own DLQ.' },
     ]);

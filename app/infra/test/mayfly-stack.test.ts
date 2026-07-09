@@ -60,3 +60,13 @@ test('SSM params and the private-key secret are provisioned', () => {
   t.resourceCountIs('AWS::SSM::Parameter', 3);
   t.resourceCountIs('AWS::SecretsManager::Secret', 1);
 });
+
+test('a webhook Lambda with a public (HMAC-authed) Function URL exists', () => {
+  const t = synth();
+  t.resourceCountIs('AWS::Lambda::Url', 1);
+  t.hasResourceProperties('AWS::Lambda::Url', { AuthType: 'NONE' });
+  t.hasResourceProperties('AWS::Lambda::Function', {
+    Runtime: 'nodejs20.x',
+    Architectures: ['arm64'],
+  });
+});

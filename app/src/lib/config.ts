@@ -11,7 +11,8 @@ export interface Config {
   webhookSecretParam: string;
   appIdParam: string;
   appKeyParam: string;
-  installationId: number;
+  /** Optional fallback; handlers normally take installationId from the webhook event/message. */
+  installationId?: number;
   maxRuntimeSeconds: number;
   maxConcurrent: number;
   provisionTtlSeconds: number;
@@ -39,7 +40,7 @@ export function loadConfig(): Config {
     webhookSecretParam: req('WEBHOOK_SECRET_PARAM'),
     appIdParam: req('APP_ID_PARAM'),
     appKeyParam: req('APP_KEY_PARAM'),
-    installationId: Number(req('INSTALLATION_ID')),
+    installationId: process.env.INSTALLATION_ID ? Number(process.env.INSTALLATION_ID) : undefined,
     maxRuntimeSeconds: Number(process.env.MAX_RUNTIME_SECONDS ?? '3600'),
     maxConcurrent: Number(process.env.MAX_CONCURRENT ?? '5'),
     provisionTtlSeconds: Number(process.env.PROVISION_TTL_SECONDS ?? '120'),
