@@ -1,0 +1,14 @@
+# The image build only needs runtime/launcher/main.go. Exclude everything heavy.
+node_modules
+infra
+src
+test
+scripts
+cdk-outputs.json
+*.log
+package-lock.json
+package.json
+tsconfig.json
+vitest.config.ts
+runtime/launcher/go.mod
+runtime/launcher/go.sum
