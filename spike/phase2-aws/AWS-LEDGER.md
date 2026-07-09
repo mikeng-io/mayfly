@@ -33,8 +33,13 @@ Lambda MicroVM holds a runner through a job when auto-suspend is off.
 `docker build` (Successfully tagged mayfly-test), and ran the built image → **completed/success**.
 Arch = **aarch64 (ARM64/Graviton)** — native ARM builds; x86 needs buildx+QEMU.
 
-**Live compute: none** — both MicroVMs (`0abca5c5`, `42f6c4c2`) TERMINATED. Two images remain
-(`mayfly-diag`, `mayfly-docker`) = tiny snapshot storage → delete on teardown.
+**ARM64 real-workload check — no friction.** A minimal Astro app (Vite/esbuild/Rollup native deps)
+did `setup-node` → `npm install` (329 pkgs, no arch errors) → `astro build` → **completed/success**
+on the ARM64 runner. Confirms normal npm/JS builds have no arch friction (the only edge — stale-
+lockfile npm optional-deps bug — is ecosystem-level, not Mayfly-specific).
+
+**Live compute: none** — all MicroVMs TERMINATED. Two images remain (`mayfly-diag`, `mayfly-docker`)
+= tiny snapshot storage → delete on teardown.
 
 ## Read-only calls so far (no resources)
 - `sts get-caller-identity` — verified identity.
