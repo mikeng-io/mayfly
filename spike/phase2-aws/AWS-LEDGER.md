@@ -14,8 +14,11 @@
 | 3 | 17:02 JST | MicroVM **image** `mayfly-diag` (arn:…:microvm-image:mayfly-diag) — building | `aws lambda-microvms create-microvm-image` (no --hooks; the --hooks shorthand caused a bogus 403) | snapshot storage | `aws lambda-microvms delete-microvm-image --image-identifier mayfly-diag --region ap-northeast-1` |
 | 4 | 17:3x JST | MicroVM **run** `microvm-0abca5c5-9571-3ac8-a466-75c660cc8a96` (SAFE experiment) — **terminated** | `run-spike-aws.sh` | ~few ¢ | already terminated (manually — a `set -u` bug skipped the auto-terminate; killed via `terminate-microvm`) |
 
+| 5 | 2026-07-09 pm | MicroVM **image** `mayfly-docker` (Docker-in-MicroVM spike, `additionalOsCapabilities=ALL`) — building | `spike/phase2b-docker/docker-spike.sh` | snapshot storage | `aws lambda-microvms delete-microvm-image --image-identifier <arn> --region ap-northeast-1` |
+| 6 | 2026-07-09 pm | MicroVM **run** ×1 (docker job) — auto-terminated on script exit | `docker-spike.sh` | ~few ¢ | auto-terminated (trap EXIT INT TERM) |
+
 *Notes:*
-- *`mayfly-runner` image was NOT created (the --hooks call 403'd before creating anything). Only `mayfly-diag` exists.*
+- *`mayfly-runner` image was NOT created (the --hooks call 403'd before creating anything). `mayfly-diag` + `mayfly-docker` exist.*
 - *HAZARD run created no MicroVM (param error: idle min is 60s, not 45).*
 - *`mayfly-diag` image still exists → delete when done (teardown checklist).*
 

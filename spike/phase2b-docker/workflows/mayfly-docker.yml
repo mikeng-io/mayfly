@@ -1,0 +1,16 @@
+name: mayfly-docker
+on:
+  workflow_dispatch:
+jobs:
+  docker:
+    runs-on: [self-hosted, mayfly]
+    steps:
+      - name: Docker-in-MicroVM
+        run: |
+          set -eux
+          docker version
+          docker run --rm hello-world
+          printf 'FROM alpine\nRUN echo built-in-microvm > /x\n' > Dockerfile.test
+          docker build -t mayfly-test -f Dockerfile.test .
+          docker run --rm mayfly-test cat /x
+          echo "arch: $(uname -m)"
