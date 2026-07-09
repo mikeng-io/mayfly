@@ -1,0 +1,30 @@
+name: mayfly-astro
+on:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: [self-hosted, mayfly]
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Build a minimal Astro app on ARM64 (native esbuild/rollup deps)
+        run: |
+          set -eux
+          node -v; npm -v; echo "arch: $(uname -m)"
+          mkdir site && cd site
+          cat > package.json <<'JSON'
+          {
+            "name": "mayfly-astro-test",
+            "type": "module",
+            "version": "0.0.1",
+            "scripts": { "build": "astro build" },
+            "dependencies": { "astro": "^4.15.0" }
+          }
+          JSON
+          mkdir -p src/pages
+          printf -- '---\n---\n<html><body><h1>hello from mayfly ARM64</h1></body></html>\n' > src/pages/index.astro
+          npm install
+          npm run build
+          ls -la dist
+          echo "ASTRO_BUILD_OK arch=$(uname -m)"
