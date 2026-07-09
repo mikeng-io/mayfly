@@ -1,0 +1,107 @@
+<style>
+  :root{
+    --ground:#f8f7f5; --panel:#ffffff; --panel-2:#f1efec; --ink:#181410;
+    --muted:#63594e; --faint:#938a7e; --border:#e4dfd8; --border-strong:#cfc7bc;
+    --ember:#c2521c; --ember-bg:#f6e7dd; --ok:#3c7a3c; --ok-bg:#e0efe0;
+    --warn:#9a6a15; --warn-bg:#f4ead4;
+    --term:#0c0a08; --term-ink:#e8e2d6; --term-dim:#9a9284;
+    --shadow:0 1px 2px rgba(24,20,16,.05),0 10px 28px rgba(24,20,16,.06);
+    --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --ground:#12100e; --panel:#1b1815; --panel-2:#151310; --ink:#efe9e2; --muted:#a99e91;
+    --faint:#776d61; --border:#2a2621; --border-strong:#3a352e; --ember:#e87a3c; --ember-bg:#2a1a10;
+    --ok:#5cb85c; --ok-bg:#12240f; --warn:#e0b24a; --warn-bg:#251d0d;
+    --term:#0a0908; --term-ink:#e8e2d6; --term-dim:#8a8478;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 14px 34px rgba(0,0,0,.4);
+  }}
+  :root[data-theme="light"]{--ground:#f8f7f5;--panel:#ffffff;--panel-2:#f1efec;--ink:#181410;--muted:#63594e;--faint:#938a7e;--border:#e4dfd8;--border-strong:#cfc7bc;--ember:#c2521c;--ember-bg:#f6e7dd;--ok:#3c7a3c;--ok-bg:#e0efe0;--warn:#9a6a15;--warn-bg:#f4ead4;--term:#0c0a08;--term-ink:#e8e2d6;--term-dim:#9a9284;--shadow:0 1px 2px rgba(24,20,16,.05),0 10px 28px rgba(24,20,16,.06);}
+  :root[data-theme="dark"]{--ground:#12100e;--panel:#1b1815;--panel-2:#151310;--ink:#efe9e2;--muted:#a99e91;--faint:#776d61;--border:#2a2621;--border-strong:#3a352e;--ember:#e87a3c;--ember-bg:#2a1a10;--ok:#5cb85c;--ok-bg:#12240f;--warn:#e0b24a;--warn-bg:#251d0d;--term:#0a0908;--term-ink:#e8e2d6;--term-dim:#8a8478;--shadow:0 1px 2px rgba(0,0,0,.4),0 14px 34px rgba(0,0,0,.4);}
+
+  *{box-sizing:border-box;} body{margin:0;}
+  .page{background:var(--ground);color:var(--ink);font-family:var(--sans);line-height:1.55;-webkit-font-smoothing:antialiased;padding:clamp(20px,5vw,60px) clamp(16px,5vw,48px) 80px;}
+  .wrap{max-width:1000px;margin:0 auto;}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--ember);margin:0 0 12px;}
+  h1{font-size:clamp(28px,5vw,44px);line-height:1.04;letter-spacing:-.02em;font-weight:840;margin:0 0 12px;text-wrap:balance;}
+  .lede{font-size:clamp(16px,2.3vw,19px);color:var(--muted);max-width:64ch;margin:0 0 8px;}
+  .lede b{color:var(--ink);font-weight:640;}
+  h2{font-family:var(--mono);font-size:12px;letter-spacing:.11em;text-transform:uppercase;color:var(--faint);font-weight:600;margin:0 0 16px;padding-bottom:9px;border-bottom:1px solid var(--border);}
+  section{margin-top:44px;}
+
+  .ladder{display:flex;flex-direction:column;gap:10px;}
+  .row{display:grid;grid-template-columns:34px 1fr;gap:14px;border:1px solid var(--border);border-left:3px solid var(--ok);border-radius:12px;background:var(--panel);padding:14px 16px;box-shadow:var(--shadow);}
+  .row .chk{color:var(--ok);font-weight:800;font-size:18px;font-family:var(--mono);}
+  .row h3{margin:0 0 4px;font-size:15px;letter-spacing:-.01em;}
+  .row p{margin:0;font-size:13.5px;color:var(--muted);}
+  .row .ev{font-family:var(--mono);font-size:12px;color:var(--ink);background:var(--panel-2);border:1px solid var(--border);border-radius:6px;padding:6px 9px;margin-top:8px;display:inline-block;}
+
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  .card{border:1px solid var(--border);border-radius:12px;background:var(--panel);padding:18px;box-shadow:var(--shadow);}
+  .card.warn{border-top:3px solid var(--warn);}
+  .card.notes{border-top:3px solid var(--ember);}
+  .card h3{margin:0 0 12px;font-size:14px;}
+  .card.warn h3{color:var(--warn);} .card.notes h3{color:var(--ember);}
+  .card ul{margin:0;padding-left:2px;list-style:none;display:flex;flex-direction:column;gap:9px;}
+  .card li{display:grid;grid-template-columns:14px 1fr;gap:9px;font-size:13px;color:var(--muted);}
+  .card li b{color:var(--ink);font-weight:620;}
+  .card li .m{font-family:var(--mono);font-weight:700;font-size:11px;}
+  .card.warn li .m{color:var(--warn);} .card.notes li .m{color:var(--ember);}
+  .card code{font-family:var(--mono);font-size:11.5px;background:var(--panel-2);border:1px solid var(--border);border-radius:4px;padding:0 4px;color:var(--ink);}
+  @media(max-width:680px){.cols{grid-template-columns:1fr;}}
+
+  .verdict{margin-top:20px;padding:16px 18px;border-radius:12px;border:1px solid var(--ok);background:var(--ok-bg);font-size:15px;color:var(--ink);}
+  .verdict b{color:var(--ok);}
+  .foot{margin-top:44px;padding-top:16px;border-top:1px solid var(--border);font-family:var(--mono);font-size:12px;color:var(--faint);}
+</style>
+
+<div class="page">
+  <div class="wrap">
+    <p class="eyebrow">Mayfly · findings · 2026-07-09</p>
+    <h1>Ephemeral GitHub Actions runners on Lambda MicroVMs — proven</h1>
+    <p class="lede">Feasibility validated <b>end-to-end on real MicroVMs</b> (Tokyo). Each CI job runs in a fresh, single-use MicroVM — JIT-registered, one job, dies. The two things that could have killed it (does it stay alive through a job; can it build containers) both work.</p>
+
+    <section>
+      <h2>What was verified</h2>
+      <div class="ladder">
+        <div class="row"><span class="chk">✓</span><div><h3>JIT hand-off over the L7 endpoint</h3><p>A MicroVM exposes only a token-auth HTTPS endpoint (no raw socket). An in-VM launcher receives the JIT config over it and starts the runner.</p><span class="ev">endpoint health 200 · jit 202 · runner connected</span></div></div>
+        <div class="row"><span class="chk">✓</span><div><h3>A MicroVM holds a runner through a job <span style="color:var(--faint);font-weight:400">(the make-or-break)</span></h3><p>Auto-suspend follows <em>inbound</em> traffic; the runner is outbound-only. With auto-suspend off, the MicroVM stays up for the whole job.</p><span class="ev">microvm=RUNNING t=10→140s · 120s job · completed/success</span></div></div>
+        <div class="row"><span class="chk">✓</span><div><h3>Docker build/run inside the MicroVM</h3><p>dockerd runs in the VM (own kernel, <code>ALL</code> caps) — containers-in-a-VM, not nested virt. First try.</p><span class="ev">docker version linux/arm64 · Hello from Docker! · Successfully tagged</span></div></div>
+        <div class="row"><span class="chk">✓</span><div><h3>Real ARM64 npm build — no friction</h3><p>Astro (Vite/esbuild/Rollup native deps): <code>setup-node</code> → <code>npm install</code> → <code>astro build</code>. Lockfile isn't x86-locked; npm installs arm64 variants.</p><span class="ev">added 329 packages · astro build · ASTRO_BUILD_OK arch=aarch64</span></div></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Constraints &amp; field notes</h2>
+      <div class="cols">
+        <div class="card warn">
+          <h3>Honest constraints</h3>
+          <ul>
+            <li><span class="m">arm64</span><span><b>ARM64 (Graviton) only.</b> Native ARM builds; x86 = QEMU emulation (opt-in <code>setup-qemu</code>+<code>buildx</code>, slower, binfmt-in-VM unverified).</span></li>
+            <li><span class="m">L7</span><span><b>L7-only ingress</b> (no raw L4 / stable IP). Fine for a runner (outbound to GitHub); killed the earlier "regional proxy" idea.</span></li>
+            <li><span class="m">idle</span><span><b>Auto-suspend is inbound-driven</b>; run job-carrying VMs with it off, suspend explicitly between jobs.</span></li>
+            <li><span class="m">image</span><span><b>Image "fatness" is a choice</b> — lean + <code>setup-*</code> actions (verified) vs a fat GitHub-like image.</span></li>
+          </ul>
+        </div>
+        <div class="card notes">
+          <h3>MicroVM gotchas (article gold)</h3>
+          <ul>
+            <li><span class="m">cli</span><span><code>aws-cli 2.1.2</code> didn't know the 2-week-old service → upgrade to ~2.28+.</span></li>
+            <li><span class="m">403</span><span>The <code>--hooks</code> shorthand → a bogus <code>403 "Unable to determine service/operation"</code>. Omit it.</span></li>
+            <li><span class="m">enum</span><span>Failure state is <code>CREATION_FAILED</code>, not <code>CREATE_FAILED</code>; 3 independent states (image/version/activation).</span></li>
+            <li><span class="m">arn</span><span><code>get/run</code> image ops need the <b>ARN</b>, not the name; microvm ops take the <b>ID</b>.</span></li>
+            <li><span class="m">region</span><span>Account default region ≠ MicroVM region — pin it (Singapore has none).</span></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Positioning &amp; cost</h2>
+      <p style="margin:0 0 12px;font-size:14.5px;color:var(--muted);"><b style="color:var(--ink)">Why not CodeBuild?</b> It already hosts GHA runners in-VPC (managed, mature) — for production, use it. Mayfly's real edge: <b style="color:var(--ink)">microVM own-kernel isolation</b> for untrusted code + <b style="color:var(--ink)">warm-start at ~zero idle cost</b> via suspend/resume (CodeBuild forces reserved-pay-for-idle <em>or</em> on-demand-cold). Narrow but real.</p>
+      <div class="verdict"><b>Cost:</b> the whole validation ran for a few <b>cents</b> — a handful of short MicroVM runs, all auto-terminated. Standing footprint ≈ $0. Every resource is CDK-managed or ledgered with a teardown step.</div>
+    </section>
+
+    <p class="foot">Mayfly · docs/findings/2026-07-09-mayfly-microvm-findings.md · control plane designed, not yet built</p>
+  </div>
+</div>
