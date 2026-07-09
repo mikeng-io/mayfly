@@ -27,6 +27,7 @@ completion. No standing fleet.
 | 2 | A **real Lambda MicroVM stays RUNNING** while the runner long-polls + executes a job | real MicroVM | ✅ (Unknown #2) |
 | 3 | **`docker build` / `docker run` inside the MicroVM** | real MicroVM | ✅ (first try) |
 | 4 | Real **npm build** (Astro → Vite/esbuild/Rollup native deps) with no arch friction | real MicroVM | ✅ |
+| 5 | GHA **`services:` container** (Postgres) integration test — full lifecycle | real MicroVM | ✅ |
 
 ---
 
@@ -78,6 +79,16 @@ The lockfile is **not** x86-locked — it records optional native deps for all p
 installs the arm64 variants. The only known failure mode (stale/incomplete lockfile →
 `Cannot find module @rollup/rollup-linux-arm64-gnu`) is an **npm/ecosystem** issue that hits any
 ARM64 CI, fixed by regenerating the lockfile — not a Mayfly defect.
+
+### 5. GHA `services:` containers work (integration tests)
+The runner ran the full `services:` lifecycle inside the MicroVM: it started a `postgres:16`
+**service container** (arm64) via the MicroVM's Docker, waited for its health check, a step connected
+and queried it, and GHA tore it down — no special config, just standard `services:` YAML.
+
+> Evidence: `pg_isready` ok → `psql … select version()` → `PostgreSQL 16.14 … aarch64` →
+> service container stopped/removed → `completed/success`.
+
+So the common **integration-test-against-a-real-DB** pattern works on Mayfly out of the box.
 
 ---
 
@@ -141,7 +152,7 @@ Real friction hit while building the spike (the useful, article-worthy part):
 - **The real control plane** — webhook (Lambda Function URL) → SQS → control Lambda → reconciler →
   DynamoDB. *Designed* (`docs/superpowers/specs/2026-07-07-mayfly-design.md`), **not built.**
 - x86 / binfmt / QEMU multi-arch inside a MicroVM.
-- `services:` containers, `actions/cache` at scale, matrix jobs.
+- `actions/cache` at scale, matrix jobs.
 - The warm-pool + reconciler + governed VPC-private-access at load; multi-tenant.
 - The HAZARD experiment (empirically showing auto-suspend *would* kill a mid-job runner) — the SAFE
   (design) config was proven; the hazard characterization was left (`HAZARD_IDLE=60`, deliberately
