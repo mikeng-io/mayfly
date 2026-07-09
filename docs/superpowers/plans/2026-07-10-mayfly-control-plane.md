@@ -10,7 +10,9 @@
 
 ## Global Constraints
 
-- **Scope = v1, article-first, single trust domain.** No multi-tenant, no warm pool autoscaling. A **fixed warm behavior is out**; v1 launches per-job (Approach B — proven), records everything, reaps reliably. (Suspended-pool / Approach C is a later ADR.)
+- **Scope = v1, single trust domain, per-job launch (Approach B — proven).** No warm pool, no multi-tenant. **Honest note (per review):** v1 makes the runner *work reliably*; it does **not** demonstrate the two "why Mayfly" claims — warm-start-at-zero-idle-cost (needs Approach C / suspended pool) and fork-isolation-via-VPC-SG (v1 only *records* trust, defers the network gate). Both are explicit post-v1 ADRs; don't market v1 as proving them.
+- **Idempotency lives in the CONTROL Lambda, not the webhook.** SQS is at-least-once → the control handler must be a **re-drivable state transition** keyed on `jobId` (record the `microvmId` the instant `run-microvm` returns; a redelivery that finds a live VM skips; a partial-crash record is reconciled). The webhook is stateless: verify → filter → enqueue → 2xx.
+- **Reconciler is account-safe:** it reconciles **our DynamoDB JobRecords ↔ live MicroVMs we launched** (every launched `microvmId` is recorded), and tags every VM `project=mayfly`. It must **never** blindly terminate all MicroVMs in the region.
 - **Region:** MicroVM GA region only — default **`ap-northeast-1`** (Tokyo). The account default region differs; **every AWS call pins the region explicitly.**
 - **Arch:** MicroVMs are **ARM64**. The runner image + launcher build arm64.
 - **AWS-API facts (verified, do not re-derive):** CLI/SDK service is `lambda-microvms`; `get-microvm-image`/`run-microvm --image-identifier` need the **image ARN** (resolve name→ARN via `list-microvm-images`); microvm ops take the **microvm ID**; failure state is `CREATION_FAILED`; `--idle-policy` min `maxIdleDurationSeconds` is 60; run job-carrying VMs with **auto-suspend off**; do **not** pass `--hooks` shorthand (bogus 403). Endpoint: `https://<endpoint>` + header `X-aws-proxy-auth`, default port 8080.
@@ -37,11 +39,12 @@ app/
     lib/
       hmac.ts                     # verifySignature(secret, rawBody, header): boolean
       github.ts                   # appJwt(), installationToken(), generateJitConfig(), getRun(), isForkPR()
-      microvm.ts                  # runMicrovm(), authToken(), postJit(), terminate(), listRunning(), imageArn()
-      jobs.ts                     # DynamoDB repo: put/get/delete correlation; idempotency by jobId
-      config.ts                   # env + SSM config loader
-      types.ts                    # shared types (JobRecord, WorkflowJobEvent, …)
-  test/                           # vitest unit tests for lib/*
+      microvm.ts                  # runMicrovm() (w/ network connectors + tag), authToken(), postJit(), terminate(), getMicrovm(), imageArn()
+      jobs.ts                     # DynamoDB repo: re-drivable provisioning claim (beginProvisioning/attachMicrovm/markRunning), get/delete, listByState
+      config.ts                   # env + SSM config loader (incl. MAX_CONCURRENT, MAX_RUNTIME, PROVISION_TTL)
+      types.ts                    # shared types (JobRecord{state}, WorkflowJobEvent, …)
+  scripts/sdk-probe.ts            # one-off: validate @aws-sdk/client-lambda-microvms against Tokyo (Task 7.5)
+  test/                           # vitest unit tests for lib/* (aws-sdk-client-mock for AWS calls)
   runtime/launcher/main.go        # productionized in-VM launcher (from spike phase2)
   image/Dockerfile                # MicroVM runner image (arm64: runner + launcher; docker optional via build arg)
 ```
@@ -99,37 +102,50 @@ test('isForkPR false for internal push', () =>
 - [ ] Run → PASS (pure pieces). API calls are covered by the Phase 6 integration checkpoint. Commit `feat: GitHub App auth + JIT/run API`.
 
 ### Task 4: Config loader (`lib/config.ts`) — TDD
-**Interfaces — Produces:** `loadConfig(): Config` where `Config = {region, imageName, jobsTable, queueUrl, repo:{owner,name}, labels:string[], webhookSecretParam, appIdParam, appKeyParam, installationId, maxRuntimeSeconds}`. Reads env vars (set by CDK), resolves SSM SecureString params lazily via a `getSecret(param)` helper.
+**Interfaces — Produces:** `loadConfig(): Config` where `Config = {region, imageName, jobsTable, jobsStateIndex, queueUrl, repo:{owner,name}, labels:string[], webhookSecretParam, appIdParam, appKeyParam, installationId, maxRuntimeSeconds, maxConcurrent, provisionTtlSeconds}`. Reads env vars (set by CDK), resolves SSM SecureString params lazily via a `getSecret(param)` helper. Defaults: `maxConcurrent=5`, `provisionTtlSeconds=120`.
 - [ ] Failing test asserting `loadConfig` throws on a missing required env and returns parsed values when present. Implement reading `process.env` + defaults (labels `['self-hosted','mayfly']`, region `ap-northeast-1`, maxRuntime `3600`). Commit.
 
 ---
 
 ## Phase 2 — State + queue + webhook (deployable slice)
 
-### Task 5: DynamoDB jobs repo (`lib/jobs.ts`) — TDD with aws-sdk-client-mock
-**Interfaces — Produces:** `putJob(rec)`, `getJob(jobId)`, `deleteJob(jobId)`, `claimJob(jobId)` (conditional put for idempotency — returns false if already present). PK = `jobId` (string).
-- [ ] Failing tests using `aws-sdk-client-mock` for `@aws-sdk/lib-dynamodb`: `claimJob` returns true first time, false on `ConditionalCheckFailedException`; `getJob` maps item→JobRecord.
-- [ ] Implement with `DynamoDBDocumentClient`; `claimJob` = `PutCommand` with `ConditionExpression: 'attribute_not_exists(jobId)'`, catch conditional failure → false. Commit `feat: DynamoDB jobs repo with idempotent claim`.
+### Task 5: DynamoDB jobs repo (`lib/jobs.ts`) — re-drivable claim, TDD
+**JobRecord.state:** `provisioning | running | done`. Record = `{jobId(PK), state, microvmId?, endpoint?, runnerName?, updatedAt, expiresAt(TTL)}`. GSI on `state` for the reconciler.
+**Interfaces — Produces:**
+- `beginProvisioning(jobId): 'proceed' | 'skip'` — conditional put that succeeds (→`proceed`) only if **no record exists OR an existing `provisioning` record is stale** (`updatedAt` older than `PROVISION_TTL=120s`, i.e. a crashed attempt). A `running` or fresh `provisioning` record → `skip` (dedupes SQS at-least-once redelivery).
+- `attachMicrovm(jobId, microvmId, endpoint)` — update the record **the instant `run-microvm` returns**, so any redelivery/reconciler can find and reap the VM.
+- `markRunning(jobId)`, `getJob(jobId)`, `deleteJob(jobId)`, `listByState(state)` (reconciler, via the GSI).
+- [ ] Failing tests (`aws-sdk-client-mock` for `@aws-sdk/lib-dynamodb`): `beginProvisioning` → `proceed` when absent; → `skip` on `ConditionalCheckFailedException`; → `proceed` when existing record is stale; `attachMicrovm` issues an `UpdateCommand`; `getJob` maps item→JobRecord; `listByState` queries the GSI.
+- [ ] Implement with `DynamoDBDocumentClient`. `beginProvisioning` = `PutCommand`, `ConditionExpression: 'attribute_not_exists(jobId) OR (#s = :prov AND updatedAt < :stale)'`.
+- [ ] Commit `feat: DynamoDB jobs repo with re-drivable provisioning claim`.
 
 ### Task 6: Stack — DynamoDB + SSM + SQS + config wiring
 **Files:** modify `app/infra/lib/mayfly-stack.ts`; test `app/infra/test/mayfly-stack.test.ts`.
-- [ ] Add: `Table` (PK `jobId`, `PAY_PER_REQUEST`, PITR, TTL attr `expiresAt`, `RemovalPolicy.DESTROY`), `Queue` (visibility 300s, `deliveryDelay: Duration.seconds(20)`, a DLQ with maxReceiveCount 3), SSM `StringParameter` placeholders for `webhookSecret`/`appId`/`installationId` (values set out-of-band; the private key in **Secrets Manager**). Tag `project=mayfly`.
-- [ ] CDK assertion test: table has PK `jobId` + PITR; queue has a DLQ + delay; `cdk-nag` AwsSolutions with justified suppressions. Run `npx vitest run` + `npx cdk synth`. Commit `feat: state + queue infra`.
+- [ ] Add: `Table` (PK `jobId`, **GSI `state-index` on `state`** for the reconciler's `listByState`, `PAY_PER_REQUEST`, PITR, TTL attr `expiresAt`, `RemovalPolicy.DESTROY`), `Queue` (visibility 300s, `deliveryDelay: Duration.seconds(20)`, a DLQ with maxReceiveCount 3), SSM `StringParameter` placeholders for `webhookSecret`/`appId`/`installationId` (values set out-of-band; the private key in **Secrets Manager**). Tag the stack `project=mayfly`.
+- [ ] **Observability (spec calls these first-class):** CloudWatch **alarm on DLQ `ApproximateNumberOfMessagesVisible ≥ 1`**; a custom-metric alarm on the reconciler's `reclaimed` count (VMs the control plane leaked); a GitHub-API-quota metric hook (logged from `github.ts`, alarm optional). SNS topic for alarms (email set out-of-band).
+- [ ] CDK assertion test: table has PK `jobId` + the `state-index` GSI + PITR; queue has a DLQ + delay; DLQ alarm exists; `cdk-nag` AwsSolutions with justified suppressions. Run `npx vitest run` + `npx cdk synth`. Commit `feat: state + queue infra + DLQ/reclaim alarms`.
 
-### Task 7: Webhook Lambda (`handlers/webhook.ts`) + Function URL — TDD handler, integration for URL
-**Interfaces — Consumes:** `verifySignature`, `jobs`, SQS SendMessage. **Produces:** Function URL handler returning 2xx fast.
-- [ ] Failing test `app/test/webhook.test.ts` (invoke the handler with a fake Function URL event): rejects bad signature → 401; ignores `action!=='queued'` → 200 no-enqueue; ignores label mismatch → 200 no-enqueue; on `queued` + label match + valid sig → 200 and one SQS `SendMessageCommand` (mock) with `{jobId, runId, installationId, owner, repo}`; on `completed` → enqueues a teardown message. Idempotency: same `jobId` twice → single enqueue (via `claimJob`).
-- [ ] Implement handler: parse raw body, `verifySignature` with the SSM secret, filter, `SendMessage`, return `{statusCode:200}`. Keep it fast (no provisioning here).
-- [ ] Add to stack: `NodejsFunction` for webhook + a **Function URL** (auth NONE — HMAC is the auth), env wiring, grant SQS send + SSM read. CDK assertion for the Function URL.
-- [ ] Run tests → PASS; `cdk synth`. Commit `feat: webhook receiver + Function URL`.
+### Task 7: Webhook Lambda (`handlers/webhook.ts`) + Function URL — **stateless**, TDD
+**Interfaces — Consumes:** `verifySignature`, SQS SendMessage. **Produces:** fast 2xx handler. **No DynamoDB here** — idempotency belongs to the control Lambda.
+- [ ] Failing test `app/test/webhook.test.ts` (fake Function URL event): **decode `isBase64Encoded` body before HMAC**; bad/absent signature → 401; `action` not in `{queued,completed}` → 200 no-enqueue; label mismatch on `queued` → 200 no-enqueue; `queued`+label+valid sig → 200 + one `SendMessageCommand` `{type:'provision', jobId, runId, installationId, owner, repo, labels}`; `completed` → 200 + `{type:'teardown', jobId, installationId, owner, repo}`.
+- [ ] Implement: `const raw = event.isBase64Encoded ? Buffer.from(event.body,'base64') : Buffer.from(event.body ?? '')` **before** `verifySignature`; then filter + `SendMessage`; `return {statusCode:200}`. No provisioning, no DynamoDB.
+- [ ] Add to stack: `NodejsFunction` + **Function URL** (auth NONE — HMAC is the auth; IP-allowlist to GitHub's published webhook ranges noted as future hardening), env, grant SQS send + SSM read.
+- [ ] Run tests → PASS; `cdk synth`. Commit `feat: stateless webhook receiver + Function URL`.
 
 ---
 
 ## Phase 3 — MicroVM client + runtime image
 
-### Task 8: MicroVM client (`lib/microvm.ts`) — thin typed wrapper (integration-tested)
-**Interfaces — Produces:** `imageArn(name)`, `runMicrovm(imageArn)→{microvmId,endpoint}`, `waitRunning(id)`, `authToken(id)→string`, `postJit(endpoint, token, encodedJit)`, `terminate(id)`, `listActive()→id[]`. Ports the **verified** logic from `spike/phase2-aws/run-spike-aws.sh` to `@aws-sdk/client-lambda-microvms` + `fetch` for the endpoint. Auto-suspend **off** (no idle policy) on run; `maximumDurationInSeconds` from config.
-- [ ] Unit-test the pure bits (endpoint URL building, header shape). The AWS calls are covered by the Phase 6 integration checkpoint (they were validated live in the spike). Commit `feat: typed Lambda MicroVM client`.
+### Task 7.5: Validate `@aws-sdk/client-lambda-microvms` against Tokyo (live preflight)
+The spikes proved the **CLI**, not the JS SDK (service GA 2026-06-22). De-risk the package + creds first.
+- [ ] `app/scripts/sdk-probe.ts`: `new LambdaMicrovmsClient({region:'ap-northeast-1'}).send(new ListMicrovmImagesCommand({}))` (creds from repo `.env`). Run → expect a (possibly empty) list; no package/auth/unknown-command error. **Read-only, no cost.** If the package/shape differs from docs, record the real one and adjust Task 8. Commit `chore: validate lambda-microvms JS SDK`.
+
+### Task 8: MicroVM client (`lib/microvm.ts`) — typed wrapper, command-shape TDD
+**Interfaces — Produces:** `imageArn(name)` (name→ARN via `ListMicrovmImagesCommand` — image ops need the ARN), `runMicrovm(imageArn)→{microvmId,endpoint}`, `waitRunning(id)`, `authToken(id)→string`, `postJit(endpoint, token, encodedJit)`, `terminate(id)`, `listOurActive(microvmIds)→id[]`. Ports the **verified** `spike/phase2-aws/run-spike-aws.sh` sequence.
+- `runMicrovm` **must** pass network connectors + tag: `ingressNetworkConnectors:[…:ALL_INGRESS]`, `egressNetworkConnectors:[…:INTERNET_EGRESS]` (**no egress = no GitHub = no job**), **no** `idlePolicy` (auto-suspend off), `maximumDurationInSeconds` from config, `project=mayfly` tag if `RunMicrovmCommand` supports it.
+- `waitRunning` treats `CREATION_FAILED`/terminal-non-`RUNNING` as an error (don't spin to timeout).
+- [ ] **Command-shape unit tests** (`aws-sdk-client-mock`): `runMicrovm` sends `RunMicrovmCommand` with the connector ARNs and **no** `idlePolicy`; `imageArn` resolves name→ARN; `waitRunning` throws on `CREATION_FAILED`; `postJit` `fetch`es `https://<endpoint>/jit` with `X-aws-proxy-auth` + `X-aws-proxy-port:8080`. Live re-verified in Task 12; these catch wrong command shapes early.
+- [ ] Commit `feat: typed Lambda MicroVM client (connectors + auto-suspend-off)`.
 
 ### Task 9: Productionize the runtime image (`runtime/launcher/main.go` + `image/Dockerfile`)
 **Files:** copy `spike/phase2-aws/app/launcher/main.go` → `app/runtime/launcher/main.go` (already proven: binds sync, `/jit`, `/status`, lifecycle hooks, stays alive); copy the Dockerfile (arm64 runner + launcher). Add a `--build-arg WITH_DOCKER` variant that installs dockerd (from `spike/phase2b-docker`) for the docker-capable image.
@@ -140,19 +156,32 @@ test('isForkPR false for internal push', () =>
 ## Phase 4 — Control Lambda (the provisioner)
 
 ### Task 10: Control handler (`handlers/control.ts`) — TDD orchestration with mocks
-**Interfaces — Consumes:** `github`, `microvm`, `jobs`, `config`. **Produces:** SQS-consumer handler.
-- [ ] Failing test `app/test/control.test.ts` (mock github + microvm + jobs): on a `queued` message → mints installation token, **re-checks the run is still queued** (skip+return if not), **fork-check** (fork ⇒ launch with no VPC SG — v1 just records `trust:'fork'`), `runMicrovm`, `waitRunning`, `authToken`, `generateJitConfig(name=jobId)`, `postJit`, `putJob({jobId,microvmId,runnerName,state:'running'})`. On a `completed` message → `getJob`, `terminate(microvmId)`, `deleteJob`. Assert the call order and that a failed `postJit` triggers `terminate` (no leak).
-- [ ] Implement to satisfy the test, porting the proven sequence from `run-spike-aws.sh`/`docker-spike.sh`.
-- [ ] Add to stack: control `NodejsFunction` with the SQS event source (batchSize 1), env, IAM for `lambda-microvms:*` (scoped), DynamoDB RW, SSM/Secrets read. Commit `feat: control-plane provisioner Lambda`.
+**Interfaces — Consumes:** `github`, `microvm`, `jobs`, `config`. **Produces:** SQS-consumer handler. This is where **idempotency + teardown** live.
+**Provision flow (re-drivable):**
+1. `beginProvisioning(jobId)` → if `skip`, ack the message and return (SQS at-least-once dedupe / already handled).
+2. Mint installation token; **re-check the run is still `queued`** via `GET runs/{runId}` — if not, `deleteJob` + return (handles `completed`-before-provision).
+3. **Fork-check `isForkPR` — fail-closed:** on any error treat as fork/untrusted; v1 records `trust:'fork'` (the VPC-SG network gate is a documented deferral, not silently skipped).
+4. `runMicrovm(imageArn)` → **immediately `attachMicrovm(jobId, microvmId, endpoint)`** (so a redelivery/reconciler can find and reap this VM even if a later step crashes).
+5. `waitRunning` → `authToken` → `github.generateJitConfig(name=jobId)` → `postJit` → `markRunning(jobId)`.
+- **`try/finally` teardown at every stage after step 4:** if `waitRunning` sees `CREATION_FAILED`, or `authToken`/`generateJitConfig`/`postJit`/`markRunning` throw → `terminate(microvmId)` and leave the record for the reconciler (or delete it) — **no leaked VM at any failure point**, not just `postJit`.
+- **Concurrency cap:** the control Lambda has **reserved concurrency** (config `MAX_CONCURRENT`, default 5) so a matrix job (→50 `queued` events) can't exceed the ~5 TPS `RunMicrovm` limit; `runMicrovm` retries `ThrottlingException` with jittered backoff. Excess SQS messages wait/retry — DLQ after N.
+**Teardown flow (`completed` message):** `getJob` → `terminate(microvmId)` (idempotent — ignore already-gone) → `deleteJob`.
+- [ ] Failing test `app/test/control.test.ts` (mock github + microvm + jobs): `beginProvisioning→skip` ⇒ no `runMicrovm`; happy path asserts call order + `attachMicrovm` fires right after `runMicrovm`; `waitRunning` throwing `CREATION_FAILED` ⇒ `terminate` called (no leak); `postJit` throwing ⇒ `terminate`; fork-check throwing ⇒ treated as fork (not fail-open); `completed` ⇒ `terminate`+`deleteJob`.
+- [ ] Implement, porting the proven sequence from `run-spike-aws.sh`/`docker-spike.sh`.
+- [ ] Add to stack: control `NodejsFunction`, SQS event source (batchSize 1), **reservedConcurrentExecutions**, env, **least-priv IAM** (enumerate `lambda-microvms:RunMicrovm`,`TerminateMicrovm`,`GetMicrovm`,`ListMicrovms`,`ListMicrovmImages`,`GetMicrovmImage`,`CreateMicrovmAuthToken` — **not** `lambda-microvms:*`), DynamoDB RW, SSM/Secrets read. Commit `feat: control-plane provisioner Lambda (idempotent + teardown-safe)`.
 
 ---
 
 ## Phase 5 — Teardown + reconciler
 
 ### Task 11: Reconciler (`handlers/reconciler.ts`) + Scheduler — TDD sweep logic
-**Interfaces — Consumes:** `microvm.listActive`, `jobs`. **Produces:** scheduled handler that terminates orphans.
-- [ ] Failing test: given active microvms not present as `running` JobRecords (or past `maxRuntime`), the handler calls `terminate` on each and cleans the record. Given healthy in-flight ones, it leaves them. (Two-phase: only terminate ones seen orphaned across the grace window — track a `firstSeenOrphan` marker in DynamoDB.)
-- [ ] Implement + add EventBridge **Scheduler** (rate 2 min) target = reconciler Lambda. Commit `feat: reconciler sweep + schedule`.
+**Interfaces — Consumes:** `jobs.listByState`, `microvm.getMicrovm`/`terminate`, `config`. **Produces:** scheduled handler that reaps our overdue VMs.
+**Account-safe by construction — record-driven, never list-all:** the reconciler iterates **our own `JobRecords`** (we recorded every `microvmId` we launched via `attachMicrovm`); it must **never** enumerate and terminate all MicroVMs in the region (that could kill unrelated VMs in Mike's Tokyo account). The `project=mayfly` tag is belt-and-suspenders, not the primary guard.
+- For each record in `provisioning`/`running`: `getMicrovm(microvmId)` — if past `maxRuntime` (record `createdAt` + `MAX_RUNTIME`), or the VM is already terminal/gone, `terminate` (idempotent) + `deleteJob`. Healthy in-flight ones are left.
+- **Two-phase (grace window):** only terminate a record seen overdue across the grace window — track a `firstSeenOverdue` marker so a job that's legitimately mid-run isn't reaped on a clock edge. Handles the `completed`-webhook-lost case (record stuck `running`, VM idle) too.
+- Emit a ` reclaimed` metric per terminate (feeds the reclaim alarm in Task 6).
+- [ ] Failing test: a `running` record past `maxRuntime` (past the grace window) ⇒ `terminate`+`deleteJob`; a fresh `running` record ⇒ left; a record whose VM `getMicrovm` reports gone ⇒ `deleteJob`; asserts it **only** acts on records from `listByState`, never a region-wide list.
+- [ ] Implement + add EventBridge **Scheduler** (rate 2 min) target = reconciler Lambda. Commit `feat: account-safe reconciler sweep + schedule`.
 
 ---
 
@@ -171,6 +200,6 @@ test('isForkPR false for internal push', () =>
 
 ## Self-review
 
-- **Spec coverage** (`docs/superpowers/specs/2026-07-07-mayfly-design.md`): webhook (T7), SQS+delay (T6), control/provision (T10), fork-check/trust (T10), reconciler (T11), DynamoDB correlation+idempotency (T5), GitHub App auth (T3), HMAC (T2), MicroVM lifecycle (T8/T9), 2xx-fast (T7), deploy+CDK (T6/T12) — all mapped.
-- **Deferred by design (recorded, not gaps):** suspended warm pool (Approach C), VPC-private-access governance beyond the fork-trust boolean, multi-region, multi-tenant, x86/QEMU. These are post-v1 ADRs.
-- **Integration-vs-unit honesty:** pure logic (HMAC, JWT, fork-check, jobs, sweep) is TDD'd with mocks; the AWS-glue (MicroVM run/JIT/terminate) was **validated live in the spikes** and is re-verified in the T12 integration checkpoint rather than mock-unit-tested — appropriate for a thin SDK wrapper over a proven flow.
+- **Spec coverage** (`docs/superpowers/specs/2026-07-07-mayfly-design.md`): webhook 2xx-fast (T7), SQS+delay+DLQ (T6), control/provision (T10), **re-drivable idempotency** (T5 repo + T10 flow), fork-check/trust fail-closed (T10), reconciler account-safe (T11), DynamoDB correlation (T5), GitHub App auth (T3), HMAC + `isBase64Encoded` (T2/T7), MicroVM lifecycle + network connectors (T8/T9), SDK validation (T7.5), **concurrency cap + throttle-retry** (T10), **observability: DLQ/reclaim/quota alarms** (T6/T11) — all mapped.
+- **Deferred by design (recorded, not gaps):** suspended warm pool (Approach C — v1 does **not** prove the warm-cost thesis), VPC-private-access network gate beyond the fork-trust boolean (v1 does **not** demonstrate fork-isolation), multi-region, multi-tenant, x86/QEMU. These are post-v1 ADRs and are stated as such, not billed as proven.
+- **Integration-vs-unit honesty (revised per review):** pure logic (HMAC, JWT, fork-check, jobs claim, sweep) is TDD'd; the AWS-glue is **not** left un-covered until T12 — `microvm.ts`/`jobs.ts`/webhook/control all get **command-shape unit tests** via `aws-sdk-client-mock` (the wrapper is exactly where new bugs live), and the JS SDK itself is validated live at T7.5 **before** control.ts depends on it. T12 is the end-to-end live re-verification, not the first time the SDK path runs.
