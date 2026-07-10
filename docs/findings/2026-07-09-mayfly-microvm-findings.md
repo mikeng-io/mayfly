@@ -144,6 +144,16 @@ Real friction hit while building the spike (the useful, article-worthy part):
   = nothing. `--maximum-duration-in-seconds` (≤ 28,800 / 8 h) is a hard backstop.
 - **Teardown discipline matters** — a `set -u` crash once skipped an auto-terminate and left a
   MicroVM running; trap `EXIT INT TERM`, and keep a resource ledger (we did — `AWS-LEDGER.md`).
+- **IAM actions are under the `lambda:` prefix, NOT `lambda-microvms:`** (the latter is only the
+  CLI/SDK client name). The control plane needs `lambda:RunMicrovm`, `TerminateMicrovm`, `GetMicrovm`,
+  `ListMicrovms`, `ListMicrovmImages`, `GetMicrovmImage`, `CreateMicrovmAuthToken` — **and**
+  `lambda:PassNetworkConnector` (RunMicrovm authorizes this against the ingress/egress connector ARNs
+  `arn:aws:lambda:<region>:aws:network-connector:aws-network-connector:{ALL_INGRESS,INTERNET_EGRESS}`).
+  A `lambda-microvms:*` policy is silently useless — you only find out at RunMicrovm time. (Verified
+  live: the deployed control plane 403'd on `lambda:ListMicrovmImages`, then `lambda:PassNetworkConnector`.)
+- **`get-microvm-image --image-identifier <name>` fails** (needs the ARN `arn:aws:lambda:<region>:<acct>:microvm-image:<name>`);
+  poll build state via `list-microvm-images` filtered by name instead.
+- **In-VM `uname -n` is `localhost`** — use `RUNNER_NAME` (the JIT runner name) to identify a run, not the hostname.
 
 ---
 

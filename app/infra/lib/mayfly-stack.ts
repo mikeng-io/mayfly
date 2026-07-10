@@ -17,15 +17,18 @@ import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import { NagSuppressions } from 'cdk-nag';
 
-/** Least-privilege lambda-microvms actions the control plane needs (never `:*`). */
+// MicroVM IAM actions live under the `lambda:` service prefix (matching the
+// arn:aws:lambda:…:microvm* resource namespace) — NOT `lambda-microvms:`, which is
+// only the CLI/SDK client name. Verified live: the API rejects lambda-microvms:*.
 const MICROVM_ACTIONS = [
-  'lambda-microvms:RunMicrovm',
-  'lambda-microvms:TerminateMicrovm',
-  'lambda-microvms:GetMicrovm',
-  'lambda-microvms:ListMicrovms',
-  'lambda-microvms:ListMicrovmImages',
-  'lambda-microvms:GetMicrovmImage',
-  'lambda-microvms:CreateMicrovmAuthToken',
+  'lambda:RunMicrovm',
+  'lambda:TerminateMicrovm',
+  'lambda:GetMicrovm',
+  'lambda:ListMicrovms',
+  'lambda:ListMicrovmImages',
+  'lambda:GetMicrovmImage',
+  'lambda:CreateMicrovmAuthToken',
+  'lambda:PassNetworkConnector', // required by RunMicrovm for the ingress/egress connectors
 ];
 
 /** Per-deploy config: image name, runner labels, and tenancy governance. Sane v1 defaults. */
