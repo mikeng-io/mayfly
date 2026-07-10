@@ -31,15 +31,16 @@ RUN set -eux; \
 COPY --from=build /launcher /usr/local/bin/launcher
 EXPOSE 8080
 
-# --- lean (default): non-root runner, no docker ---
-FROM base AS runner
-RUN useradd -m runner && chown -R runner:runner /actions-runner
-USER runner
-CMD ["/usr/local/bin/launcher"]
-
-# --- docker-capable: dockerd-in-VM, runs as root (RUNNER_ALLOW_RUNASROOT) ---
+# --- docker-capable: dockerd-in-VM, runs as root (RUNNER_ALLOW_RUNASROOT). Build with --target docker ---
 FROM base AS docker
 RUN apt-get update \
  && apt-get install -y --no-install-recommends docker.io iptables uidmap \
  && rm -rf /var/lib/apt/lists/*
+CMD ["/usr/local/bin/launcher"]
+
+# --- lean runner: non-root, no docker. LAST stage => the default build target ---
+# (AWS create-microvm-image builds the final stage; keep the lean image as the v1 default.)
+FROM base AS runner
+RUN useradd -m runner && chown -R runner:runner /actions-runner
+USER runner
 CMD ["/usr/local/bin/launcher"]

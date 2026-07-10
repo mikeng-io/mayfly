@@ -77,6 +77,16 @@ test('the control Lambda has a reserved-concurrency cap and an SQS event source'
   t.resourceCountIs('AWS::Lambda::EventSourceMapping', 1);
 });
 
+test('image-build infra: an artifact bucket + a build role with sts:TagSession trust', () => {
+  const t = synth();
+  t.resourceCountIs('AWS::S3::Bucket', 1);
+  t.hasResourceProperties('AWS::IAM::Role', {
+    AssumeRolePolicyDocument: {
+      Statement: Match.arrayWith([Match.objectLike({ Action: 'sts:TagSession' })]),
+    },
+  });
+});
+
 test('a reconciler runs on a 2-minute schedule', () => {
   const t = synth();
   t.hasResourceProperties('AWS::Events::Rule', { ScheduleExpression: 'rate(2 minutes)' });

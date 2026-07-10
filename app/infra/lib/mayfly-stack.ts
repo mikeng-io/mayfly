@@ -2,6 +2,7 @@ import { Stack, StackProps, RemovalPolicy, Duration, CfnOutput } from 'aws-cdk-l
 import { Construct } from 'constructs';
 import * as path from 'node:path';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
@@ -62,6 +63,8 @@ export class MayflyStack extends Stack {
   readonly webhookUrl: lambda.FunctionUrl;
   readonly controlFn: NodejsFunction;
   readonly reconcilerFn: NodejsFunction;
+  readonly artifactBucket: s3.Bucket;
+  readonly buildRole: iam.Role;
 
   constructor(scope: Construct, id: string, props?: MayflyStackProps) {
     super(scope, id, props);
@@ -241,11 +244,40 @@ export class MayflyStack extends Stack {
       targets: [new targets.LambdaFunction(this.reconcilerFn)],
     });
 
+    // --- Image build: artifact bucket + the role AWS assumes to build the MicroVM image ---
+    this.artifactBucket = new s3.Bucket(this, 'ArtifactBucket', {
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      enforceSSL: true,
+      removalPolicy: RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
+    });
+    this.buildRole = new iam.Role(this, 'MicrovmBuildRole', {
+      assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
+      description: 'Role AWS assumes to build the Mayfly MicroVM image',
+    });
+    // MicroVM image builds additionally require sts:TagSession on the trust policy.
+    this.buildRole.assumeRolePolicy?.addStatements(
+      new iam.PolicyStatement({
+        actions: ['sts:TagSession'],
+        principals: [new iam.ServicePrincipal('lambda.amazonaws.com')],
+      }),
+    );
+    this.artifactBucket.grantRead(this.buildRole);
+    this.buildRole.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ['logs:CreateLogGroup', 'logs:CreateLogStream', 'logs:PutLogEvents'],
+        resources: ['arn:aws:logs:*:*:*'],
+      }),
+    );
+
     // --- Outputs consumed by the setup tool (scripts/setup-app.ts) ---
     new CfnOutput(this, 'WebhookUrl', { value: this.webhookUrl.url, description: 'GitHub App webhook target' });
     new CfnOutput(this, 'WebhookSecretParamName', { value: this.webhookSecretParam.parameterName });
     new CfnOutput(this, 'AppIdParamName', { value: this.appIdParam.parameterName });
     new CfnOutput(this, 'AppKeySecretName', { value: this.appPrivateKey.secretName ?? '' });
+    new CfnOutput(this, 'ArtifactBucketName', { value: this.artifactBucket.bucketName });
+    new CfnOutput(this, 'BuildRoleArn', { value: this.buildRole.roleArn });
 
     this.applyNagSuppressions();
   }
@@ -280,6 +312,24 @@ export class MayflyStack extends Stack {
         true,
       );
     }
+    NagSuppressions.addResourceSuppressions(this.artifactBucket, [
+      {
+        id: 'AwsSolutions-S1',
+        reason:
+          'Transient build-artifact bucket (holds only the image code zip); server access logging is not warranted for v1 and would spawn a second bucket.',
+      },
+    ]);
+    NagSuppressions.addResourceSuppressions(
+      this.buildRole,
+      [
+        {
+          id: 'AwsSolutions-IAM5',
+          reason:
+            'grantRead wildcards (s3:GetObject*/GetBucket*/List* on the artifact bucket + /*) and the standard logs:*:*:* build-logging resource are the minimal read+log grants the MicroVM build service needs.',
+        },
+      ],
+      true,
+    );
     NagSuppressions.addResourceSuppressions(this.deadLetterQueue, [
       { id: 'AwsSolutions-SQS3', reason: 'This queue IS the dead-letter queue; it does not need its own DLQ.' },
     ]);
