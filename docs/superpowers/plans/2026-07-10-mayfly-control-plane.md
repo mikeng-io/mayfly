@@ -129,7 +129,7 @@ test('isForkPR false for internal push', () =>
 **Interfaces — Consumes:** `verifySignature`, SQS SendMessage. **Produces:** fast 2xx handler. **No DynamoDB here** — idempotency belongs to the control Lambda.
 - [ ] Failing test `app/test/webhook.test.ts` (fake Function URL event): **decode `isBase64Encoded` body before HMAC**; bad/absent signature → 401; `action` not in `{queued,completed}` → 200 no-enqueue; label mismatch on `queued` → 200 no-enqueue; `queued`+label+valid sig → 200 + one `SendMessageCommand` `{type:'provision', jobId, runId, installationId, owner, repo, labels}`; `completed` → 200 + `{type:'teardown', jobId, installationId, owner, repo}`.
 - [ ] Implement: `const raw = event.isBase64Encoded ? Buffer.from(event.body,'base64') : Buffer.from(event.body ?? '')` **before** `verifySignature`; then filter + `SendMessage`; `return {statusCode:200}`. No provisioning, no DynamoDB.
-- [ ] Add to stack: `NodejsFunction` + **Function URL** (auth NONE — HMAC is the auth; IP-allowlist to GitHub's published webhook ranges noted as future hardening), env, grant SQS send + SSM read.
+- [ ] Add to stack: `NodejsFunction` + **Function URL** (auth NONE — HMAC is the auth). **Accepted v1 tradeoff, not best practice** — the hardened end state is CloudFront + WAF → Function URL via OAC; see `docs/decisions/2026-07-10-webhook-ingress.md`. Env, grant SQS send + SSM read.
 - [ ] Run tests → PASS; `cdk synth`. Commit `feat: stateless webhook receiver + Function URL`.
 
 ---

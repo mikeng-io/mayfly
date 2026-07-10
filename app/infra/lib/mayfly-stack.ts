@@ -184,6 +184,10 @@ export class MayflyStack extends Stack {
     this.queue.grantSendMessages(this.webhookFn);
     this.webhookSecretParam.grantRead(this.webhookFn);
 
+    // Auth is HMAC in the handler (GitHub webhooks can't do IAM/SigV4). authType NONE means the
+    // endpoint is openly invocable — an ACCEPTED v1 tradeoff, NOT best practice. The hardened end
+    // state is CloudFront + WAF -> Function URL via OAC (authType AWS_IAM). See
+    // docs/decisions/2026-07-10-webhook-ingress.md for the full rationale + upgrade path.
     this.webhookUrl = this.webhookFn.addFunctionUrl({
       authType: lambda.FunctionUrlAuthType.NONE,
     });
