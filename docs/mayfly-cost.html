@@ -62,7 +62,7 @@
   <h1>Mayfly vs GitHub-hosted runners</h1>
   <p class="lede">Marginal CI cost for a <b style="color:var(--ink)">private repo, after the free tier</b>.
     Self-hosted runners burn <b style="color:var(--ink)">zero GitHub Actions minutes</b> — you pay AWS instead.
-    Drag the inputs; the one soft number (the AWS rate) is yours to set.</p>
+    Mayfly's rate is the <b style="color:var(--ink)">real ap-northeast-1 Graviton MicroVM pricing</b>, derived from the vCPU + memory you pick.</p>
 
   <div class="grid">
     <div class="card">
@@ -83,9 +83,13 @@
         </div>
       </div>
       <div class="ctrl">
-        <div class="lab"><b>Mayfly AWS rate</b><span class="v" id="vRate"></span></div>
-        <input type="range" id="rate" min="0.0005" max="0.010" step="0.0005" value="0.002">
-        <p class="hint">assumed Graviton proxy — set the real lambda-microvms rate</p>
+        <div class="lab"><b>MicroVM vCPU</b><span class="v" id="vCpu"></span></div>
+        <input type="range" id="cpu" min="1" max="8" step="1" value="2">
+      </div>
+      <div class="ctrl">
+        <div class="lab"><b>MicroVM memory</b><span class="v" id="vMem"></span></div>
+        <input type="range" id="mem" min="1" max="16" step="1" value="4">
+        <p class="hint" id="rateNote">real ap-northeast-1 Graviton rates</p>
       </div>
       <div class="ctrl">
         <div class="lab"><b>Boot overhead / job</b><span class="v" id="vBoot"></span></div>
@@ -125,8 +129,8 @@
 
   <p class="foot">
     GitHub bills <b style="color:var(--ink)">rounded up to the whole minute</b>, per job; Mayfly (AWS) bills per-second.<br>
-    The AWS rate is an <b>assumption</b> (Graviton/Lambda-arm proxy) — confirm against the real lambda-microvms pricing.<br>
-    Excludes ops labor to run the control plane. Mayfly's durable edge is isolation + warm-start, not just cost.
+    Mayfly rate = real Tokyo lambda-microvms Graviton pricing: <b style="color:var(--ink)">$0.0000322421/vCPU-s + $0.0000042688/GB-s</b> (+ boot + fixed).<br>
+    Excludes ops labor to run the control plane. A 2 vCPU/4 GB VM ≈ GitHub arm64's rate — so <b>cost is a wash vs arm64-hosted</b>; Mayfly's real edge is isolation + warm-start.
   </p>
 </div>
 
@@ -137,18 +141,25 @@
   const money4 = (n) => '$' + n.toFixed(4);
   let ghRate = 0.005;
 
-  const S = { job: $('job'), vol: $('vol'), rate: $('rate'), boot: $('boot'), fix: $('fix') };
+  // Real ap-northeast-1 (Tokyo) lambda-microvms Graviton/ARM rates, per second.
+  const VCPU_S = 0.0000322421, MEM_S = 0.0000042688;
+  const mfPerSec = (cpu, mem) => cpu * VCPU_S + mem * MEM_S;
+
+  const S = { job: $('job'), vol: $('vol'), cpu: $('cpu'), mem: $('mem'), boot: $('boot'), fix: $('fix') };
   const ghPerJob = (jobSec) => Math.ceil(jobSec / 60) * ghRate;
-  const mfPerJob = (jobSec, rate, boot) => ((jobSec + boot) / 60) * rate;
+  const mfPerJob = (jobSec, cpu, mem, boot) => (jobSec + boot) * mfPerSec(cpu, mem);
 
   function compute() {
-    const jobSec = +S.job.value, vol = +S.vol.value, rate = +S.rate.value, boot = +S.boot.value, fix = +S.fix.value;
-    const gpj = ghPerJob(jobSec), mpj = mfPerJob(jobSec, rate, boot);
+    const jobSec = +S.job.value, vol = +S.vol.value, cpu = +S.cpu.value, mem = +S.mem.value, boot = +S.boot.value, fix = +S.fix.value;
+    const gpj = ghPerJob(jobSec), mpj = mfPerJob(jobSec, cpu, mem, boot);
     const gh = gpj * vol, mf = mpj * vol + fix;
+    const rateMin = mfPerSec(cpu, mem) * 60;
 
     $('vJob').textContent = jobSec < 60 ? jobSec + ' s' : (jobSec/60).toFixed(jobSec%60?1:0) + ' min';
     $('vVol').textContent = vol.toLocaleString() + '/mo';
-    $('vRate').textContent = '$' + rate.toFixed(4) + '/min';
+    $('vCpu').textContent = cpu + ' vCPU';
+    $('vMem').textContent = mem + ' GB';
+    $('rateNote').textContent = 'real Tokyo Graviton rate = $' + rateMin.toFixed(4) + '/min';
     $('vBoot').textContent = boot + ' s';
     $('vFix').textContent = '$' + fix + '/mo';
     $('vGh').textContent = ghRate === 0.005 ? 'arm64' : 'x64';
@@ -163,12 +174,12 @@
     const cheaper = mf < gh ? 'Mayfly' : 'GitHub-hosted';
     const savePct = Math.abs(1 - (mf / gh)) * 100;
     $('verdict').innerHTML = `<b>${cheaper}</b> is cheaper here — <span class="save">${money(Math.abs(gh-mf))}/mo (${savePct.toFixed(0)}%)</span>.` +
-      (be ? ` Break-even ≈ <b>${be.toLocaleString()} jobs/mo</b>.` : ` Mayfly's per-job compute isn't cheaper at this rate — raise volume won't help.`);
+      (be ? ` Break-even ≈ <b>${be.toLocaleString()} jobs/mo</b>.` : ` Mayfly's per-job compute isn't cheaper at this size — more volume won't flip it.`);
 
-    draw(jobSec, vol, rate, boot, fix, be);
+    draw(jobSec, vol, cpu, mem, boot, fix, be);
   }
 
-  function draw(jobSec, vol, rate, boot, fix, be) {
+  function draw(jobSec, vol, cpu, mem, boot, fix, be) {
     const cv = $('cv'), dpr = 1;
     const w = cv.clientWidth || 880, h = 260; cv.width = w * dpr; cv.height = h * dpr;
     const ctx = cv.getContext('2d'); ctx.clearRect(0,0,cv.width,cv.height);
@@ -176,7 +187,7 @@
     const c = (n) => cs.getPropertyValue(n).trim();
     const pad = {l:56, r:14, t:14, b:28};
     const maxV = Math.max(2000, vol * 1.6);
-    const gpj = ghPerJob(jobSec), mpj = mfPerJob(jobSec, rate, boot);
+    const gpj = ghPerJob(jobSec), mpj = mfPerJob(jobSec, cpu, mem, boot);
     const maxY = Math.max(gpj * maxV, mpj * maxV + fix) * 1.08 || 1;
     const X = (v) => pad.l + (v / maxV) * (w - pad.l - pad.r);
     const Y = (y) => h - pad.b - (y / maxY) * (h - pad.t - pad.b);

@@ -176,6 +176,14 @@ No standing compute. The whole validation cost a few **cents** (a handful of sho
 auto-terminated). Standing footprint ≈ $0: CDKToolkit + spike stack (empty bucket + role) + two tiny
 MicroVM images. Every resource is CDK-managed or ledgered with a teardown step.
 
+**Real `lambda-microvms` pricing (AWS Price List API, ap-northeast-1 / Tokyo):** ARM/Graviton
+**$0.0000322421/vCPU-s + $0.0000042688/GB-s** (x86: $0.0000371569 + $0.0000049195); snapshot storage
+$0.0001333/GB-hr, read $0.00185/GB, write $0.00466/GB. A 2 vCPU/4 GB ARM MicroVM = **$0.00489/min** —
+about the **same as a GitHub-hosted arm64 2-core ($0.005/min)**. So on cost Mayfly is a **wash vs
+arm64-hosted** (cheaper only for very short jobs via per-second billing, or a smaller VM), and cheaper
+than x64-hosted above ~290 jobs/mo — but you add a fixed control-plane cost + ops. **Cost is not the
+reason to choose Mayfly** (isolation + warm-start are). See `docs/cost-comparison.md` + `docs/mayfly-cost.html`.
+
 ## Reproduce
 
 - `spike/phase1-local/` — Unknown #1 (local, no AWS).
