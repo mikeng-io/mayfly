@@ -1,6 +1,6 @@
 # ADR-0001: Gateway execution model on Lambda
 
-- **Status:** Proposed
+- **Status:** Deprecated — project pivoted from Meridian (regional egress) to Mayfly; kept for the historical trail.
 - **Date:** 2026-07-06
 - **Deciders:** Lead architect, synthesizing an independent two-model council (Opus + Fable)
 - **Bounded contexts touched:** Gateway, Session, Routing, Lifecycle, Configuration

@@ -18,8 +18,8 @@ flowchart LR
   CTL -->|beginProvisioning<br/>claim| DDB[("DynamoDB<br/>job records")]
   CTL -->|run-microvm<br/>+ connectors| MV["MicroVM<br/>(Graviton, own kernel)"]
   CTL -->|JIT over L7 endpoint| MV
-  MV -->|outbound| GH
-  MV -.->|completed webhook| FU
+  MV -->|outbound long-poll| GH
+  GH -.->|completed webhook| FU
   CTL -->|terminate| MV
   SCHED["EventBridge<br/>2-min sweep"] --> REC["reconciler Lambda"]
   REC -->|reap overdue<br/>record-driven| MV
@@ -55,7 +55,7 @@ app/
   runtime/      Go in-VM launcher     image/  MicroVM runner Dockerfile (lean + docker targets)
   build-image.sh  scripts/setup-app.ts (one-button GitHub App)  INSTALL.md  AWS-LEDGER.md
 spike/          the crux feasibility spikes (phase1 local, phase2 AWS, phase2b docker)
-docs/           findings · decisions (ADRs) · reviews · runbooks · cost · research
+docs/           findings · adr (ADRs) · reviews · runbooks · cost · research
 ```
 
 ## Run it

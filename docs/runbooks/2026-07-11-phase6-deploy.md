@@ -1,6 +1,6 @@
 # Runbook — Phase 6: deploy + live integration (Mayfly control plane)
 
-- **Account:** 163703054402 · **Region:** ap-northeast-1 (Tokyo) · **Repo under test:** `mikeng-io/mayfly-test`
+- **Account:** 163703054402 · **Region:** ap-northeast-1 (Tokyo) · **Repo under test:** `mikeng-io/mayfly-demo`
 - **Cost:** a few cents (short MicroVM runs) + tiny snapshot storage while the image exists + ~$0 idle infra + ~$0.40/mo per Secrets Manager secret. Net footprint after teardown ≈ $0.
 - **Everything is CDK-managed** — no manual AWS resource creation. Record anything live in `app/AWS-LEDGER.md`.
 
@@ -24,7 +24,7 @@ aws cloudformation describe-stacks --stack-name CDKToolkit --region ap-northeast
 
 - [ ] Account = 163703054402
 - [ ] AWS creds present in repo `.env` (sourced by `build-image.sh`)
-- [ ] `mikeng-io/mayfly-test` has a workflow with `runs-on: [self-hosted, mayfly]` (e.g. reuse `spike/phase2-aws/workflows/mayfly-spike.yml`)
+- [ ] `mikeng-io/mayfly-demo` has a workflow with `runs-on: [self-hosted, mayfly]` (e.g. reuse `spike/phase2-aws/workflows/mayfly-spike.yml`)
 - [ ] **GitHub PAT rotated** (a fragment was pasted in chat earlier — still pending)
 
 ---
@@ -43,7 +43,7 @@ npm run deploy            # cdk deploy --require-approval never --outputs-file .
 
 Creates (all destroyed by `npm run destroy`): DynamoDB `JobsTable` (+`state-index`), SQS `JobsQueue`+`JobsDLQ`,
 SSM params (`/mayfly/{webhookSecret,appId,installationId}`), Secrets Manager `/mayfly/appPrivateKey`,
-SNS `AlarmTopic` + 2 alarms, 3 Lambdas (webhook+Function URL, control, reconciler), EventBridge 2-min rule,
+SNS `AlarmTopic` + 3 alarms (DLQ, reclaim, quota-drop), 3 Lambdas (webhook+Function URL, control, reconciler), EventBridge 2-min rule,
 S3 `ArtifactBucket`, `MicrovmBuildRole`.
 
 **Verify**
@@ -83,7 +83,7 @@ npm run setup-app                       # personal account
 
 Browser opens → **Create** (manifest pre-seeded with the deployed Function URL + Mayfly's permissions) →
 the helper writes App id/webhook secret to SSM and the private key to Secrets Manager → click **Install**
-on `mikeng-io/mayfly-test`.
+on `mikeng-io/mayfly-demo`.
 
 **Governance:** the stack default is `allowedOwners=['mikeng-io']`, `allowAll=false`. `mikeng-io` is served
 by default. If installing under a different owner (e.g. `nortrix-labs`), add it to `allowedOwners` in
@@ -102,7 +102,7 @@ aws secretsmanager get-secret-value --secret-id /mayfly/appPrivateKey --region a
 
 ## 4. Live integration test
 
-Trigger the workflow in `mikeng-io/mayfly-test` (`workflow_dispatch` of the `runs-on: [self-hosted, mayfly]` job).
+Trigger the workflow in `mikeng-io/mayfly-demo` (`workflow_dispatch` of the `runs-on: [self-hosted, mayfly]` job).
 
 > **Use a plain-shell job** (e.g. `mayfly-spike.yml`). The default `mayfly-runner` image is the LEAN
 > variant — no dockerd — so `docker`/`services:` jobs will fail. Those need the `docker` image target.

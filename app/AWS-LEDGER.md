@@ -5,9 +5,10 @@
 > Live record of everything created **directly in AWS** for the control plane, so teardown never
 > needs CloudTrail archaeology. Everything is CDK-managed (`app/infra`) — no manual resource creation.
 
-## Current state — DEPLOYED 2026-07-11 (Phase 6 live)
+## Current state — DEPLOYED & VERIFIED LIVE 2026-07-11
 
-Control plane + demo API deployed to Tokyo (spend authorized). GitHub App not yet created.
+Control plane + demo API deployed to Tokyo (spend authorized). GitHub App `mayfly` (id 4267032) created +
+installed on `mikeng-io/mayfly-demo`; a real job ran end-to-end (see the VERIFIED LIVE note below). 0 MicroVMs running.
 
 | # | When | Resource | Created by | Cost | How to destroy |
 |---|------|----------|-----------|------|----------------|
@@ -32,22 +33,15 @@ the job to **success**, posted its receipt to the demo API, and teardown termina
 live at https://mikeng-io.github.io/mayfly-demo/ (feed shows real receipts). **All MicroVMs terminated
 (0 running), SQS drained.** Cost so far: cents (image build + a handful of short MicroVM runs).
 
-## Task 12 (deploy) — resources this WILL create when green-lit
+## Inside MayflyStack (what `npm run destroy` removes)
 
-`cd app/infra && npm run deploy` will create (all CDK-managed, `cdk destroy` removes):
-- DynamoDB `JobsTable` (+ `state-index` GSI, PITR, TTL) — PAY_PER_REQUEST, ~$0 idle
-- SQS `JobsQueue` + `JobsDLQ` — ~$0 idle
-- SSM params `/mayfly/{webhookSecret,appId,installationId}` (placeholders; set real values out-of-band)
-- Secrets Manager `/mayfly/appPrivateKey` (~$0.40/mo per secret)
-- SNS `AlarmTopic` + 2 CloudWatch alarms (DLQ, reclaim)
-- 3 Lambdas (webhook + Function URL, control, reconciler) — ARM64, pay-per-invoke
-- EventBridge rule (2-min reconciler sweep)
-- The MicroVM **runner image** (`build-image.sh`, Task 12) — snapshot storage (~$0.08/GB-mo)
+DynamoDB `JobsTable` (+`state-index` GSI, PITR, TTL) · SQS `JobsQueue` + `JobsDLQ` · SSM
+`/mayfly/{webhookSecret,appId,installationId}` · Secrets Manager `/mayfly/appPrivateKey` (~$0.40/mo) · SNS
+`AlarmTopic` + **3 CloudWatch alarms (DLQ, reclaim, quota-drop)** · 3 ARM64 Lambdas (webhook+Function URL,
+control, reconciler) · EventBridge 2-min rule · S3 `ArtifactBucket` · `MicrovmBuildRole`. The MicroVM
+**runner image** is separate (delete via `delete-microvm-image`).
 
-**Gated on:** Mike creating the GitHub App (Administration:write + Actions:read), pointing its
-webhook at the Function URL, and green-lighting the deploy + real MicroVM runs (cents).
-
-## Teardown checklist (after Task 12)
+## Teardown checklist
 - [ ] terminate any live MicroVMs (`reconcile` / `terminate-microvm`)
 - [ ] delete the runner MicroVM image
 - [ ] `cd app/infra && npm run destroy`

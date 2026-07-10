@@ -1,51 +1,44 @@
-# Mayfly — project status & action plan
+# Mayfly — project status
 
 _Ephemeral GitHub Actions runners on AWS Lambda MicroVMs. Updated 2026-07-11._
 
 ## TL;DR
 
-**The control plane is code-complete for v1** — built, tested (app 74 + infra 11 green), cdk-nag clean,
-adversarially reviewed, fixes applied. The only thing between "code" and "proven working" is the **Phase 6
-live deploy**, which is **yours** (it spends money and needs you to create a GitHub App). I cannot do that step.
+**Deployed and verified live end-to-end on real AWS (ap-northeast-1).** A real `workflow_job` provisioned
+a Graviton MicroVM, a JIT runner ran the job to success, posted its fingerprint, and teardown reaped the VM.
+Control plane + demo API are live; the public demo is up. AWS is at ~$0 idle (0 MicroVMs running).
 
 ## Done ✅ (all committed)
 
-- Control plane: webhook (Function URL), control (idempotent provision + teardown-safe), reconciler
-  (account-safe sweep). Libs: hmac, github, config, jobs, microvm, governance.
-- CDK stack: DynamoDB(+GSI), SQS+DLQ, 3 Lambdas, alarms (DLQ / reclaim / quota-drop), image-build infra.
-- MicroVM image pipeline: `build-image.sh` + two-target Dockerfile (verified `docker build` locally).
-- Install flow: one-button GitHub App via manifest (`npm run setup-app`).
-- Governance: fail-closed org/repo allowlist + per-owner concurrency quota (delayed-requeue backpressure).
-- Docs: findings, deploy runbook, ADRs (webhook-ingress, handler-runtime), Phase 6 review + fixes, ledger.
+- **Control plane** — webhook (Function URL), control (idempotent provision + teardown-safe), reconciler
+  (account-safe sweep). Libs: hmac, github, config, jobs, microvm, governance, manifest.
+- **CDK stack** — DynamoDB(+GSI), SQS+DLQ, 3 Lambdas, **3 alarms** (DLQ / reclaim / quota-drop), image-build infra.
+- **Governance** — fail-closed org/repo allowlist + per-owner concurrency quota (delayed-requeue backpressure).
+- **Image pipeline** — `build-image.sh` + two-target Dockerfile; `mayfly-runner` image built (v1.0).
+- **Install flow** — one-button GitHub App via manifest (`npm run setup-app`).
+- **Deployed + verified** — MayflyStack + MayflyDemoStack live; GitHub App `mayfly` (id 4267032) installed on
+  `mikeng-io/mayfly-demo`; end-to-end run proven (see `app/AWS-LEDGER.md`).
+- **Docs** — README (+ architecture diagram), findings (with real pricing + IAM facts), ADRs
+  (`docs/adr/` 0002-webhook-ingress, 0003-handler-runtime), reviews, deploy runbook, cost model + calculator.
 
-## Left to do
+## Live endpoints
 
-### A. YOURS — the live deploy (gated: spends money + needs a GitHub App)
+- Webhook Function URL: `https://tszbder3gu3lnbefrzx2eyponi0njqdw.lambda-url.ap-northeast-1.on.aws/`
+- Demo API: `https://fc4ueyqlq7a5krr7vu73r2dcqq0ygoaa.lambda-url.ap-northeast-1.on.aws/`
+- Public demo site: https://mikeng-io.github.io/mayfly-demo/
 
-Follow `docs/runbooks/2026-07-11-phase6-deploy.md` exactly. In order:
+## Open items
 
-1. [ ] **Rotate the GitHub PAT** (a fragment was pasted in chat earlier — security).
-2. [ ] `cd app && npm ci` → `cd infra && npm ci && npm run deploy`  (stand up the stack)
-3. [ ] `cd app && ./build-image.sh`  (create the `mayfly-runner` MicroVM image)
-4. [ ] `npm run setup-app` → create + install the GitHub App on `mikeng-io/mayfly-test`
-5. [ ] Trigger a plain-shell `runs-on: [self-hosted, mayfly]` job → verify provision→run→teardown→reconciler-clean
-6. [ ] Teardown (Step 5 of the runbook) + update the ledger
+### Decisions (yours)
+- [ ] **Leave it running** (cheap, for the demo) **or tear down** (runbook Step 5 + `delete-secret --force-delete-without-recovery`).
+- [ ] **Rotate the GitHub PAT** (a fragment was pasted in chat earlier — security).
 
-**Only #1 and the decision to run this are blocking.** Everything else below is optional and I can do it
-without you or any spend.
+### Optional, no spend (mine, on request)
+- [ ] **Webhook hardening** — CloudFront + WAF + OAC (deferred by ADR-0002, `docs/adr/0002-webhook-ingress.md`); move the webhook secret SSM String → Secrets Manager.
+- [ ] **Docker-image-on-AWS variant** — build/publish the `docker` target image so `services:`/`docker` jobs work (default image is lean/plain-shell).
+- [ ] **Richer live lifecycle** on the demo (queued→booting→running) — needs the control plane to emit provisioning events.
 
-### B. MINE — optional, no spend (pick any, or none)
+### Later (bigger forks)
+- [ ] **Hosted multi-tenant SaaS** — per-tenant isolation, metering/billing, abuse defense. The governance layer is its foundation.
 
-- [ ] **Article artifact** — a polished HTML summary of the design + findings (the original "article-first" goal; not yet built for the control plane).
-- [ ] **Top-level README** tying the repo together (spike + app + docs).
-- [ ] **Webhook hardening** — CloudFront + WAF + OAC (deferred by ADR `2026-07-10-webhook-ingress`); move the webhook secret from SSM String → Secrets Manager.
-- [ ] **Docker-image-on-AWS variant** — build/publish the `docker` target image so `services:`/`docker` jobs work (v1 default image is lean/plain-shell).
-
-### C. LATER — bigger forks (only if you decide to)
-
-- [ ] **Hosted multi-tenant SaaS** (Option B): per-tenant isolation, metering/billing, abuse defense. Big commitment; the governance layer is its foundation.
-
-## The single next action
-
-**You:** rotate the PAT, then decide go/no-go on the Phase 6 deploy (A). It's ~cents and ~30 min following the runbook.
-**Me (optional, in parallel):** say the word and I'll knock out any B item while you deploy — my default pick is the **article artifact**, since that's the project's original purpose.
+> Article content is produced elsewhere; this repo stays technical + stack.
