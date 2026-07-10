@@ -5,15 +5,28 @@
 > Live record of everything created **directly in AWS** for the control plane, so teardown never
 > needs CloudTrail archaeology. Everything is CDK-managed (`app/infra`) — no manual resource creation.
 
-## Current state (Phases 1–5 complete, NOT deployed)
+## Current state — DEPLOYED 2026-07-11 (Phase 6 live)
 
-**Nothing has been deployed for the control plane.** Phases 1–5 are pure code + local tests + a
-single read-only probe. The stack is defined but not `cdk deploy`-ed.
+Control plane + demo API deployed to Tokyo (spend authorized). GitHub App not yet created.
 
 | # | When | Resource | Created by | Cost | How to destroy |
 |---|------|----------|-----------|------|----------------|
-| — | 2026-07-10 | **Read-only SDK probe** (`ListMicrovmImages` in Tokyo) — created **nothing** | `app/scripts/sdk-probe.ts` | $0 | n/a (read-only) |
+| 1 | 2026-07-11 | **MayflyStack** (DynamoDB+GSI, SQS+DLQ, 3 Lambdas, Function URL, SNS+3 alarms, S3 ArtifactBucket, MicrovmBuildRole, EventBridge rule) | `cd app/infra && npm run deploy` | ~$0 idle + ~$0.40/mo secret | `cd app/infra && npm run destroy` + force-delete secret |
+| 2 | 2026-07-11 | MicroVM **image** `mayfly-runner` (`arn:aws:lambda:ap-northeast-1:163703054402:microvm-image:mayfly-runner`, version 1.0, state CREATED) | `app/build-image.sh` | snapshot storage (~$0.08/GB-mo) | `aws lambda-microvms delete-microvm-image --image-identifier <ARN> --region ap-northeast-1` |
+| 3 | 2026-07-11 | **MayflyDemoStack** (DynamoDB, API Lambda + Function URL, 2 SSM params) | `mayfly-demo/api/infra npm run deploy` | ~$0 idle | `cd mayfly-demo/api/infra && npm run destroy` |
 | ★ | (pre-existing) | `CDKToolkit` stack in ap-northeast-1 | spike `cdk bootstrap` | ~$0 | left intentionally (standard CDK) |
+
+**Key endpoints/ARNs**
+- Webhook Function URL: `https://tszbder3gu3lnbefrzx2eyponi0njqdw.lambda-url.ap-northeast-1.on.aws/`
+- Demo API URL: `https://fc4ueyqlq7a5krr7vu73r2dcqq0ygoaa.lambda-url.ap-northeast-1.on.aws/`
+- ArtifactBucket: `mayflystack-artifactbucket7410c9ef-by42yn3gezmi`
+- Image ARN: `arn:aws:lambda:ap-northeast-1:163703054402:microvm-image:mayfly-runner`
+
+**Gotcha hit:** `get-microvm-image --image-identifier <name>` fails (needs the ARN) — the image ARN is
+`arn:aws:lambda:<region>:<acct>:microvm-image:<name>`. `build-image.sh` now polls via `list-microvm-images`
+(name-filtered) instead. The image built fine; only the poll was blind.
+
+**No live MicroVMs yet** — none run until a `workflow_job` arrives (needs the GitHub App).
 
 ## Task 12 (deploy) — resources this WILL create when green-lit
 

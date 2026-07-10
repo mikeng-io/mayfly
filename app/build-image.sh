@@ -43,9 +43,15 @@ echo "[build] upload s3://$S3_BUCKET/$KEY"; aws s3 cp app.zip "s3://$S3_BUCKET/$
 # Left empty by default (the spike built without --hooks).
 read -r -a HOOKS_ARGS <<< "${MAYFLY_HOOKS_ARGS:-}"
 
-if LM get-microvm-image --image-identifier "$IMAGE_NAME" >/dev/null 2>&1; then
-  echo "[build] image exists → update-microvm-image…"
-  LM update-microvm-image --image-identifier "$IMAGE_NAME" \
+# NB: get-microvm-image needs the ARN, not the name — so we track state via
+# list-microvm-images (name-filtered), which is the reliable path for both the
+# existence check and the build poll.
+img_field(){ LM list-microvm-images --query "items[?name=='$IMAGE_NAME'].$1 | [0]" --output text 2>/dev/null; }
+
+ARN=$(img_field imageArn)
+if [ -n "$ARN" ] && [ "$ARN" != "None" ]; then
+  echo "[build] image exists ($ARN) → update-microvm-image…"
+  LM update-microvm-image --image-identifier "$ARN" \
     --code-artifact "uri=s3://$S3_BUCKET/$KEY" \
     --base-image-arn "$BASE_IMAGE_ARN" --build-role-arn "$BUILD_ROLE_ARN" \
     "${HOOKS_ARGS[@]}" >/dev/null
@@ -60,7 +66,7 @@ fi
 echo -n "[build] waiting for build (runs the Dockerfile in AWS; a few min)"
 built=0
 for _ in $(seq 1 80); do
-  imgst=$(LM get-microvm-image --image-identifier "$IMAGE_NAME" --query state --output text 2>/dev/null || echo '?')
+  imgst=$(img_field state); [ -n "$imgst" ] || imgst='?'
   echo -n " $imgst"
   case "$imgst" in
     CREATED|UPDATED) echo; built=1; break ;;
@@ -70,10 +76,11 @@ for _ in $(seq 1 80); do
 done
 [ "$built" = 1 ] || { echo; echo "[build] TIMEOUT waiting for build"; exit 1; }
 
-# A CREATED/UPDATED image can still hold a FAILED version — check the version state.
-verst=$(LM get-microvm-image --image-identifier "$IMAGE_NAME" --query 'latestVersion.state' --output text 2>/dev/null || echo '?')
-[ "$verst" = SUCCESSFUL ] || { echo "[build] image built but version state=$verst (expected SUCCESSFUL)"; exit 1; }
+# A CREATED/UPDATED image can still hold a FAILED version — require an active version + no failure.
+active=$(img_field latestActiveImageVersion); failed=$(img_field latestFailedImageVersion)
+{ [ -n "$active" ] && [ "$active" != "None" ] && { [ -z "$failed" ] || [ "$failed" = "None" ]; }; } \
+  || { echo "[build] version not healthy (active=$active failed=$failed)"; exit 1; }
 
-IMAGE_ARN=$(LM list-microvm-images --query "items[?name=='$IMAGE_NAME'].imageArn | [0]" --output text)
+IMAGE_ARN=$(img_field imageArn)
 echo "[build] ✓ image ready: $IMAGE_NAME ($IMAGE_ARN), version SUCCESSFUL"
 echo "[build]   NOTE: record this image in app/AWS-LEDGER.md (snapshot storage until deleted)."
