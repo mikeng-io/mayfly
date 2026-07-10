@@ -26,7 +26,11 @@ Control plane + demo API deployed to Tokyo (spend authorized). GitHub App not ye
 `arn:aws:lambda:<region>:<acct>:microvm-image:<name>`. `build-image.sh` now polls via `list-microvm-images`
 (name-filtered) instead. The image built fine; only the poll was blind.
 
-**No live MicroVMs yet** — none run until a `workflow_job` arrives (needs the GitHub App).
+**VERIFIED LIVE 2026-07-11** — GitHub App `mayfly` (id 4267032) installed on `mikeng-io/mayfly-demo`;
+a real `workflow_job` provisioned a Graviton MicroVM (aarch64, AL2023 kernel 6.1.166), the JIT runner ran
+the job to **success**, posted its receipt to the demo API, and teardown terminated the VM. Public site
+live at https://mikeng-io.github.io/mayfly-demo/ (feed shows real receipts). **All MicroVMs terminated
+(0 running), SQS drained.** Cost so far: cents (image build + a handful of short MicroVM runs).
 
 ## Task 12 (deploy) — resources this WILL create when green-lit
 
