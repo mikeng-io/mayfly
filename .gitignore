@@ -55,3 +55,6 @@ aws-exports.js
 spike/**/config.env
 spike/**/*.zip
 spike/**/cdk-outputs.json
+
+# CDK deploy outputs (any package)
+/app/cdk-outputs.json
