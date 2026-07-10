@@ -85,10 +85,12 @@ export async function handler(event: FunctionUrlEvent): Promise<FunctionUrlResul
       labels: job.labels,
     };
     await sqs.send(new SendMessageCommand({ QueueUrl: cfg.queueUrl, MessageBody: JSON.stringify(msg) }));
+    console.log(`[webhook] enqueued provision job=${jobId} ${owner}/${repo}`);
     return { statusCode: 200, body: 'provision enqueued' };
   }
 
   const msg: ControlMessage = { type: 'teardown', jobId, installationId, owner, repo };
   await sqs.send(new SendMessageCommand({ QueueUrl: cfg.queueUrl, MessageBody: JSON.stringify(msg) }));
+  console.log(`[webhook] enqueued teardown job=${jobId} ${owner}/${repo}`);
   return { statusCode: 200, body: 'teardown enqueued' };
 }

@@ -34,6 +34,8 @@ webhook at the Function URL, and green-lighting the deploy + real MicroVM runs (
 - [ ] terminate any live MicroVMs (`reconcile` / `terminate-microvm`)
 - [ ] delete the runner MicroVM image
 - [ ] `cd app/infra && npm run destroy`
+- [ ] **force-delete the secret** (else it lingers billable up to 30d + blocks re-deploy):
+      `aws secretsmanager delete-secret --secret-id /mayfly/appPrivateKey --force-delete-without-recovery --region ap-northeast-1`
 - [ ] confirm no MicroVMs remain: `aws lambda-microvms list-microvms --region ap-northeast-1`
 
 ## Still pending (Mike's action)

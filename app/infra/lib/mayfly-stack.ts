@@ -166,6 +166,20 @@ export class MayflyStack extends Stack {
     });
     reclaimAlarm.addAlarmAction(new cwActions.SnsAction(this.alarmTopic));
 
+    const quotaDropAlarm = new cw.Metric({
+      namespace: METRIC_NAMESPACE,
+      metricName: 'QuotaDropped',
+      statistic: 'Sum',
+      period: Duration.minutes(5),
+    }).createAlarm(this, 'QuotaDropAlarm', {
+      threshold: 1,
+      evaluationPeriods: 1,
+      comparisonOperator: cw.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      treatMissingData: cw.TreatMissingData.NOT_BREACHING,
+      alarmDescription: 'A job was dropped after exhausting its per-owner quota requeue budget.',
+    });
+    quotaDropAlarm.addAlarmAction(new cwActions.SnsAction(this.alarmTopic));
+
     // --- Shared Lambda config ---
     const commonEnv: Record<string, string> = {
       MAYFLY_REGION: this.region,
@@ -183,7 +197,11 @@ export class MayflyStack extends Stack {
       APP_ID_PARAM: this.appIdParam.parameterName,
       APP_KEY_PARAM: this.appPrivateKey.secretName,
     };
-    const bundling = { minify: true, sourceMap: true, target: 'node20' };
+    // bundleAwsSDK: true is REQUIRED — the Node 20 runtime only ships the older AWS SDK v3
+    // clients. @aws-sdk/client-lambda-microvms (GA 2026) is NOT in the runtime, so CDK's default
+    // (--external:@aws-sdk/*) would make control/reconciler crash with MODULE_NOT_FOUND at cold
+    // start. Bundling the SDK into the artifact fixes it.
+    const bundling = { minify: true, sourceMap: true, target: 'node20', bundleAwsSDK: true };
 
     // --- Webhook Lambda + Function URL (auth NONE; HMAC is the auth) ---
     this.webhookFn = new NodejsFunction(this, 'WebhookFn', {
@@ -231,6 +249,9 @@ export class MayflyStack extends Stack {
     this.appPrivateKey.grantRead(this.controlFn);
     this.controlFn.addToRolePolicy(
       new iam.PolicyStatement({ actions: MICROVM_ACTIONS, resources: ['*'] }),
+    );
+    this.controlFn.addToRolePolicy(
+      new iam.PolicyStatement({ actions: ['cloudwatch:PutMetricData'], resources: ['*'] }),
     );
 
     // --- Reconciler Lambda + scheduled sweep (record-driven, account-safe) ---

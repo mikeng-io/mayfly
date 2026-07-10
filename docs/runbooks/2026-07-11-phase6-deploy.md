@@ -32,10 +32,14 @@ aws cloudformation describe-stacks --stack-name CDKToolkit --region ap-northeast
 ## 1. Deploy the stack
 
 ```bash
-cd app/infra
-npm ci
+cd app && npm ci          # REQUIRED: NodejsFunction bundles @aws-sdk/* from app/node_modules
+cd infra && npm ci
 npm run deploy            # cdk deploy --require-approval never --outputs-file ../cdk-outputs.json
 ```
+
+> The Lambdas bundle the AWS SDK into the artifact (`bundleAwsSDK: true`) because
+> `@aws-sdk/client-lambda-microvms` isn't in the Node 20 runtime. `app/node_modules` must exist
+> (the `cd app && npm ci` above) or esbuild can't resolve it.
 
 Creates (all destroyed by `npm run destroy`): DynamoDB `JobsTable` (+`state-index`), SQS `JobsQueue`+`JobsDLQ`,
 SSM params (`/mayfly/{webhookSecret,appId,installationId}`), Secrets Manager `/mayfly/appPrivateKey`,
@@ -100,6 +104,9 @@ aws secretsmanager get-secret-value --secret-id /mayfly/appPrivateKey --region a
 
 Trigger the workflow in `mikeng-io/mayfly-test` (`workflow_dispatch` of the `runs-on: [self-hosted, mayfly]` job).
 
+> **Use a plain-shell job** (e.g. `mayfly-spike.yml`). The default `mayfly-runner` image is the LEAN
+> variant — no dockerd — so `docker`/`services:` jobs will fail. Those need the `docker` image target.
+
 Watch the pipeline:
 ```bash
 R=ap-northeast-1
@@ -131,10 +138,15 @@ for id in $(aws lambda-microvms list-microvms --region ap-northeast-1 --query 'i
 aws lambda-microvms delete-microvm-image --image-identifier mayfly-runner --region ap-northeast-1
 # destroy the stack
 cd infra && npm run destroy
+# Secrets Manager keeps a deleted secret in a recovery window (up to 30d) — this contradicts
+# "≈$0" AND blocks a same-day re-deploy (name collision). Force-delete it:
+aws secretsmanager delete-secret --secret-id /mayfly/appPrivateKey \
+  --force-delete-without-recovery --region ap-northeast-1 2>/dev/null || true
 # confirm clean
 aws lambda-microvms list-microvms --region ap-northeast-1 --query 'length(items)'   # -> 0
 ```
 - [ ] no MicroVMs remain, image deleted, `MayflyStack` destroyed
+- [ ] `/mayfly/appPrivateKey` force-deleted (else it lingers billable + blocks re-deploy)
 - [ ] `app/AWS-LEDGER.md` updated; only the standing `CDKToolkit` remains (~$0)
 
 ---

@@ -1,4 +1,5 @@
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
+import { CloudWatchClient, PutMetricDataCommand } from '@aws-sdk/client-cloudwatch';
 import { loadConfig, getSecret, getSecretsManagerValue } from '../lib/config';
 import { createJobsRepo, type JobsRepo } from '../lib/jobs';
 import { createMicrovmClient, type MicrovmClient } from '../lib/microvm';
@@ -37,6 +38,8 @@ export interface ControlDeps {
   /** Re-queue an over-quota provision (delayed) instead of launching now. */
   requeue: (msg: ControlMessage, delaySeconds: number) => Promise<void>;
   maxRequeues: number;
+  /** Surface a dropped-over-quota job (so it isn't silent data loss). */
+  emitQuotaDrop?: () => Promise<void>;
   sleep?: (ms: number) => Promise<void>;
   retries?: number;
 }
@@ -73,17 +76,23 @@ async function provision(msg: Extract<ControlMessage, { type: 'provision' }>, de
   if (active >= deps.perOwnerConcurrency) {
     const attempts = (msg.attempts ?? 0) + 1;
     if (attempts <= deps.maxRequeues) {
+      console.log(`[control] quota defer: ${msg.owner} at ${active}/${deps.perOwnerConcurrency}, requeue #${attempts} job=${msg.jobId}`);
       await deps.requeue({ ...msg, attempts }, REQUEUE_DELAY_SECONDS);
       return;
     }
     console.warn(
-      `[control] quota: dropping job ${msg.jobId} for ${msg.owner} after ${attempts - 1} requeues (limit ${deps.perOwnerConcurrency})`,
+      `[control] quota DROP: job ${msg.jobId} for ${msg.owner} after ${attempts - 1} requeues (limit ${deps.perOwnerConcurrency})`,
     );
+    await deps.emitQuotaDrop?.();
     return;
   }
 
   // 1. Re-drivable idempotency claim. "skip" = SQS redelivery / already handled.
-  if ((await deps.jobs.beginProvisioning(msg.jobId, msg.runId, msg.owner)) === 'skip') return;
+  if ((await deps.jobs.beginProvisioning(msg.jobId, msg.runId, msg.owner)) === 'skip') {
+    console.log(`[control] skip (already handled) job=${msg.jobId}`);
+    return;
+  }
+  console.log(`[control] provisioning job=${msg.jobId} owner=${msg.owner} run=${msg.runId}`);
 
   // 2. Auth + re-check the run is still queued (handles completed-before-provision).
   const { appId, privateKey } = await deps.loadAppCreds();
@@ -118,6 +127,7 @@ async function provision(msg: Extract<ControlMessage, { type: 'provision' }>, de
     msg.jobId,
   );
   await deps.jobs.attachMicrovm(msg.jobId, microvmId, endpoint);
+  console.log(`[control] launched microvm=${microvmId} job=${msg.jobId} trust=${trust}`);
 
   // 5. Everything past here can leak the VM on failure -> terminate in the catch.
   try {
@@ -127,7 +137,9 @@ async function provision(msg: Extract<ControlMessage, { type: 'provision' }>, de
     const jit = await deps.github.generateJitConfig(token, msg.owner, msg.repo, runnerName, msg.labels);
     await deps.microvm.postJit(endpoint, auth, jit);
     await deps.jobs.markRunning(msg.jobId, runnerName, trust);
+    console.log(`[control] running job=${msg.jobId} microvm=${microvmId} runner=${runnerName}`);
   } catch (e) {
+    console.error(`[control] provision failed job=${msg.jobId} microvm=${microvmId} — terminating:`, e);
     await deps.microvm.terminate(microvmId);
     throw e; // surface to SQS: retry, then DLQ
   }
@@ -137,6 +149,7 @@ async function teardown(msg: Extract<ControlMessage, { type: 'teardown' }>, deps
   const rec = await deps.jobs.getJob(msg.jobId);
   if (rec?.microvmId) await deps.microvm.terminate(rec.microvmId);
   await deps.jobs.deleteJob(msg.jobId);
+  console.log(`[control] teardown job=${msg.jobId} microvm=${rec?.microvmId ?? 'none'}`);
 }
 
 /** Process one control message (exported for unit tests). */
@@ -148,6 +161,7 @@ export async function processMessage(msg: ControlMessage, deps: ControlDeps): Pr
 function buildDeps(): ControlDeps {
   const cfg = loadConfig();
   const sqs = new SQSClient({ region: cfg.region });
+  const cw = new CloudWatchClient({ region: cfg.region });
   return {
     jobs: createJobsRepo({
       table: cfg.jobsTable,
@@ -171,6 +185,14 @@ function buildDeps(): ControlDeps {
           QueueUrl: cfg.queueUrl,
           MessageBody: JSON.stringify(m),
           DelaySeconds: delaySeconds,
+        }),
+      );
+    },
+    emitQuotaDrop: async () => {
+      await cw.send(
+        new PutMetricDataCommand({
+          Namespace: 'Mayfly',
+          MetricData: [{ MetricName: 'QuotaDropped', Value: 1, Unit: 'Count' }],
         }),
       );
     },

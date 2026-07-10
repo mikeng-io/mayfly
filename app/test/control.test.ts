@@ -52,6 +52,7 @@ function deps(over: Partial<ControlDeps> = {}): ControlDeps {
     perOwnerConcurrency: 10,
     maxRequeues: 5,
     requeue: vi.fn().mockResolvedValue(undefined),
+    emitQuotaDrop: vi.fn().mockResolvedValue(undefined),
     sleep: async () => {},
     ...over,
   };
@@ -161,6 +162,7 @@ test('quota requeues are bounded: dropped after maxRequeues (no requeue, no laun
   await processMessage({ ...provisionMsg, attempts: 5 }, d);
   expect(d.requeue).not.toHaveBeenCalled();
   expect(d.jobs.beginProvisioning).not.toHaveBeenCalled();
+  expect(d.emitQuotaDrop).toHaveBeenCalledOnce(); // dropped jobs are surfaced, not silent
 });
 
 test('under quota: provisions normally', async () => {
