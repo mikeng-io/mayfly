@@ -187,6 +187,15 @@ The spikes proved the **CLI**, not the JS SDK (service GA 2026-06-22). De-risk t
 
 ## Phase 6 — Wire, deploy, integration checkpoint (the real end-to-end)
 
+### Task 11.7: One-button GitHub App install (manifest flow) — DONE
+**Distribution model:** Mayfly is **self-hosted / BYO-cloud** (adopter deploys their own stack +
+App; not a hosted SaaS). To make step "create a GitHub App" frictionless:
+- `src/lib/manifest.ts`: `buildManifest` (administration:write + actions:read + `workflow_job`), `exchangeManifestCode` (redirect code → appId/pem/webhookSecret), `persistCredentials` (SSM PutParameter + Secrets Manager PutSecretValue), `newAppUrl`/`installUrl`. TDD with `aws-sdk-client-mock`.
+- `scripts/setup-app.ts`: thin local server — renders the manifest form pre-seeded with the deployed Function URL, CSRF `state` guard, exchanges the code, writes the three secrets to AWS, shows the Install link. `npm run setup-app [-- --org=ORG]`.
+- Stack `CfnOutput`s (WebhookUrl + param/secret names) feed the tool via `cdk-outputs.json`.
+- `INSTALL.md` documents the 3-step adopter journey. Sequence: `cdk deploy` → `setup-app` (create+install App) → add `runs-on:[self-hosted,mayfly]`.
+
+
 ### Task 12: Deploy + live integration test
 **Deliverable:** the whole thing works against `mikeng-io/mayfly-test`.
 - [ ] `cd app/infra && npm run deploy` (Tokyo). Set SSM/Secrets values (webhook secret, App id, installation id, private key). **Record every created resource in `app/AWS-LEDGER.md`.**
