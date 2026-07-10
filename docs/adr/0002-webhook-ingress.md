@@ -1,7 +1,7 @@
-# ADR: Webhook ingress — bare Lambda Function URL for v1
+# ADR-0002: Webhook ingress — bare Lambda Function URL for v1
 
-- **Date:** 2026-07-10
 - **Status:** Accepted (v1) — **explicitly not the best-practice end state**; upgrade path defined below.
+- **Date:** 2026-07-10
 - **Component:** `WebhookFn` + Function URL in `app/infra/lib/mayfly-stack.ts`, handler `app/src/handlers/webhook.ts`.
 
 ## Decision

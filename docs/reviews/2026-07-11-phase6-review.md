@@ -5,7 +5,7 @@
 - **Cross-checked against:** `app/infra/lib/mayfly-stack.ts`, `app/build-image.sh`,
   `app/scripts/setup-app.ts`, `app/src/lib/{manifest,config,governance,jobs,microvm,github}.ts`,
   `app/src/handlers/{webhook,control,reconciler}.ts`, `app/image/Dockerfile`, package manifests,
-  `docs/findings/2026-07-09-mayfly-microvm-findings.md`, `docs/decisions/2026-07-10-webhook-ingress.md`.
+  `docs/findings/2026-07-09-mayfly-microvm-findings.md`, `docs/adr/0002-webhook-ingress.md`.
 
 **Verdict: deploy-with-changes.** The runbook sequence, output keys, IAM grants, and governance are
 sound, but one packaging defect will very likely make the paid live test fail *after* you have spent

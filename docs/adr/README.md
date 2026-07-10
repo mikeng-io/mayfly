@@ -1,9 +1,10 @@
 # Architecture Decision Records
 
-This directory records the significant architectural decisions made on Meridian,
-including the context that forced the decision and the consequences we accepted.
+This directory records the significant architectural decisions made on Mayfly
+(and the earlier Meridian phase it pivoted from), including the context that
+forced each decision and the consequences we accepted.
 
-Meridian is an architecture research project. The *reasoning* is the product, so
+This is an architecture research project. The *reasoning* is the product, so
 ADRs here are expected to be fuller than a typical shipping product's — they
 record alternatives considered, trade-offs weighed, and assumptions we are
 deliberately testing.
@@ -28,6 +29,8 @@ deliberately testing.
 | ADR | Title | Status |
 | --- | ----- | ------ |
 | [0001](../attic/adr-0001-gateway-execution-model.md) | Gateway execution model on Lambda | Archived — project pivoted to Mayfly |
+| [0002](0002-webhook-ingress.md) | Webhook ingress — bare Lambda Function URL for v1 | Accepted (v1) |
+| [0003](0003-handler-runtime.md) | Lambda handler runtime — TypeScript / Node 20 | Accepted |
 
 > The regional-egress ("Meridian") direction was abandoned after analysis showed it
 > couldn't be both serverless and a transparent proxy. The project pivoted to **Mayfly**

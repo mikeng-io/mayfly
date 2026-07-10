@@ -1,7 +1,7 @@
-# ADR: Lambda handler runtime — TypeScript / Node 20
+# ADR-0003: Lambda handler runtime — TypeScript / Node 20
 
-- **Date:** 2026-07-11
 - **Status:** Accepted
+- **Date:** 2026-07-11
 - **Scope:** the control-plane Lambda handlers (`app/src/handlers/*`). Not the CDK (mandated TS) or the in-VM launcher (Go).
 
 ## Decision

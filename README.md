@@ -37,11 +37,11 @@ teardown ever misses (never a region-wide terminate).
 | Layer | Choice |
 |---|---|
 | Infrastructure | **AWS CDK (TypeScript)** — all resources, no manual creation |
-| Handlers | TypeScript / Node 20, ARM64 Lambdas ([why](docs/decisions/2026-07-11-handler-runtime.md)) |
+| Handlers | TypeScript / Node 20, ARM64 Lambdas ([why](docs/adr/0003-handler-runtime.md)) |
 | In-VM launcher | **Go** (static binary; receives JIT config, execs `run.sh`, optional lazy dockerd) |
 | Compute | AWS **Lambda MicroVMs** (Firecracker, Graviton/ARM64), GA 2026-06-22 |
 | State / queue | DynamoDB (correlation + idempotency, `state` GSI) · SQS + DLQ |
-| Auth | GitHub **App** (JWT → installation token) · HMAC webhook · Function URL (auth NONE + HMAC, [ADR](docs/decisions/2026-07-10-webhook-ingress.md)) |
+| Auth | GitHub **App** (JWT → installation token) · HMAC webhook · Function URL (auth NONE + HMAC, [ADR](docs/adr/0002-webhook-ingress.md)) |
 | Observability | CloudWatch alarms (DLQ / reclaim / quota-drop) → SNS |
 
 ## Repo layout
@@ -80,7 +80,7 @@ fork trust; the VPC-SG network gate is a documented post-v1 deferral.
 ## Docs index
 
 - **Findings** (verified facts + field notes + real pricing): [`docs/findings/2026-07-09-mayfly-microvm-findings.md`](docs/findings/2026-07-09-mayfly-microvm-findings.md)
-- **Decisions (ADRs):** [`docs/decisions/`](docs/decisions/)
+- **Decisions (ADRs):** [`docs/adr/`](docs/adr/)
 - **Reviews (adversarial):** [`docs/reviews/`](docs/reviews/)
 - **Cost:** [`docs/cost-comparison.md`](docs/cost-comparison.md) + interactive `docs/mayfly-cost.html`
 - **Status:** [`docs/PROJECT-STATUS.md`](docs/PROJECT-STATUS.md)
