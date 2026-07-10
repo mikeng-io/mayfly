@@ -20,11 +20,11 @@ beforeEach(() => ddb.reset());
 
 test('beginProvisioning returns "proceed" and writes a provisioning record with a stale-guard condition', async () => {
   ddb.on(PutCommand).resolves({});
-  const r = await repo().beginProvisioning('job-1', 55);
+  const r = await repo().beginProvisioning('job-1', 55, 'acme');
   expect(r).toBe('proceed');
   const input = ddb.commandCalls(PutCommand)[0].args[0].input;
   expect(input.TableName).toBe('MayflyJobs');
-  expect(input.Item).toMatchObject({ jobId: 'job-1', runId: 55, state: 'provisioning', createdAt: NOW });
+  expect(input.Item).toMatchObject({ jobId: 'job-1', runId: 55, owner: 'acme', state: 'provisioning', createdAt: NOW });
   expect(input.ConditionExpression).toContain('attribute_not_exists(jobId)');
   expect(input.ExpressionAttributeValues![':stale']).toBe(NOW - 120);
 });
@@ -78,6 +78,15 @@ test('listByState queries the GSI by state', async () => {
   const input = ddb.commandCalls(QueryCommand)[0].args[0].input;
   expect(input.IndexName).toBe('state-index');
   expect(input.ExpressionAttributeValues![':s']).toBe('running');
+});
+
+test('countActiveByOwner sums provisioning+running records for one owner', async () => {
+  ddb
+    .on(QueryCommand, { ExpressionAttributeValues: { ':s': 'provisioning' } })
+    .resolves({ Items: [{ jobId: 'a', owner: 'acme' }] })
+    .on(QueryCommand, { ExpressionAttributeValues: { ':s': 'running' } })
+    .resolves({ Items: [{ jobId: 'b', owner: 'acme' }, { jobId: 'c', owner: 'other' }] });
+  expect(await repo().countActiveByOwner('acme')).toBe(2);
 });
 
 test('setFirstSeenOverdue is idempotent (if_not_exists) and returns the marker', async () => {

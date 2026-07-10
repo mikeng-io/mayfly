@@ -7,7 +7,6 @@ export interface Config {
   jobsTable: string;
   jobsStateIndex: string;
   queueUrl: string;
-  repo: { owner: string; name: string };
   labels: string[];
   webhookSecretParam: string;
   appIdParam: string;
@@ -17,6 +16,21 @@ export interface Config {
   maxRuntimeSeconds: number;
   maxConcurrent: number;
   provisionTtlSeconds: number;
+  // --- tenancy governance ---
+  allowedOwners: string[];
+  allowedRepos: string[];
+  allowAll: boolean;
+  /** Max concurrent (provisioning+running) MicroVMs a single owner may hold. */
+  perOwnerConcurrency: number;
+  /** How many times an over-quota provision is re-queued before it is dropped. */
+  maxRequeues: number;
+}
+
+function csv(name: string): string[] {
+  return (process.env[name] ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
 function req(name: string): string {
@@ -33,11 +47,7 @@ export function loadConfig(): Config {
     jobsTable: req('JOBS_TABLE'),
     jobsStateIndex: process.env.JOBS_STATE_INDEX ?? 'state-index',
     queueUrl: req('QUEUE_URL'),
-    repo: { owner: req('REPO_OWNER'), name: req('REPO_NAME') },
-    labels: req('LABELS')
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean),
+    labels: csv('LABELS'),
     webhookSecretParam: req('WEBHOOK_SECRET_PARAM'),
     appIdParam: req('APP_ID_PARAM'),
     appKeyParam: req('APP_KEY_PARAM'),
@@ -45,6 +55,11 @@ export function loadConfig(): Config {
     maxRuntimeSeconds: Number(process.env.MAX_RUNTIME_SECONDS ?? '3600'),
     maxConcurrent: Number(process.env.MAX_CONCURRENT ?? '5'),
     provisionTtlSeconds: Number(process.env.PROVISION_TTL_SECONDS ?? '120'),
+    allowedOwners: csv('ALLOWED_OWNERS'),
+    allowedRepos: csv('ALLOWED_REPOS'),
+    allowAll: process.env.ALLOW_ALL === 'true',
+    perOwnerConcurrency: Number(process.env.PER_OWNER_CONCURRENCY ?? '10'),
+    maxRequeues: Number(process.env.MAX_REQUEUES ?? '5'),
   };
 }
 

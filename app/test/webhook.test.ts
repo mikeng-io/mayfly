@@ -15,9 +15,8 @@ beforeEach(() => {
     IMAGE_NAME: 'mayfly-runner',
     JOBS_TABLE: 'MayflyJobs',
     QUEUE_URL: 'https://sqs.ap-northeast-1.amazonaws.com/1/mayfly',
-    REPO_OWNER: 'mikeng-io',
-    REPO_NAME: 'mayfly-test',
     LABELS: 'self-hosted,mayfly',
+    ALLOWED_OWNERS: 'mikeng-io',
     WEBHOOK_SECRET_PARAM: '/mayfly/webhookSecret',
     APP_ID_PARAM: '/mayfly/appId',
     APP_KEY_PARAM: '/mayfly/appPrivateKey',
@@ -79,6 +78,16 @@ test('queued + matching labels enqueues a provision message', async () => {
     owner: 'mikeng-io',
     repo: 'mayfly-test',
   });
+});
+
+test('a repo outside the allowlist is rejected (no enqueue)', async () => {
+  const body = {
+    ...queuedBody,
+    repository: { name: 'x', full_name: 'stranger/x', owner: { login: 'stranger' } },
+  };
+  const res = await handler(event(body));
+  expect(res.statusCode).toBe(200);
+  expect(sqs.commandCalls(SendMessageCommand)).toHaveLength(0);
 });
 
 test('queued with non-matching labels is ignored', async () => {

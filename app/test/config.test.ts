@@ -8,9 +8,8 @@ const ENV: Record<string, string> = {
   IMAGE_NAME: 'mayfly-runner',
   JOBS_TABLE: 'MayflyJobs',
   QUEUE_URL: 'https://sqs.ap-northeast-1.amazonaws.com/1/mayfly',
-  REPO_OWNER: 'mikeng-io',
-  REPO_NAME: 'mayfly-test',
   LABELS: 'self-hosted, mayfly',
+  ALLOWED_OWNERS: 'mikeng-io, nortrix-labs',
   WEBHOOK_SECRET_PARAM: '/mayfly/webhookSecret',
   APP_ID_PARAM: '/mayfly/appId',
   APP_KEY_PARAM: '/mayfly/appKey',
@@ -27,20 +26,24 @@ afterEach(() => {
   process.env = saved;
 });
 
-test('loadConfig maps env and trims/parses labels', () => {
+test('loadConfig maps env and trims/parses labels + allowlist', () => {
   const c = loadConfig();
   expect(c.region).toBe('ap-northeast-1');
-  expect(c.repo).toEqual({ owner: 'mikeng-io', name: 'mayfly-test' });
   expect(c.labels).toEqual(['self-hosted', 'mayfly']);
+  expect(c.allowedOwners).toEqual(['mikeng-io', 'nortrix-labs']);
   expect(c.installationId).toBe(12345);
   expect(c.maxRuntimeSeconds).toBe(3600);
   expect(c.jobsStateIndex).toBe('state-index');
 });
 
-test('loadConfig applies defaults for maxConcurrent and provisionTtl', () => {
+test('loadConfig applies governance + concurrency defaults', () => {
   const c = loadConfig();
   expect(c.maxConcurrent).toBe(5);
   expect(c.provisionTtlSeconds).toBe(120);
+  expect(c.allowAll).toBe(false);
+  expect(c.perOwnerConcurrency).toBe(10);
+  expect(c.maxRequeues).toBe(5);
+  expect(c.allowedRepos).toEqual([]);
 });
 
 test('loadConfig throws naming the missing required var', () => {

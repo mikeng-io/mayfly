@@ -1,6 +1,7 @@
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
 import { verifySignature } from '../lib/hmac';
 import { loadConfig, getSecret } from '../lib/config';
+import { isAllowed } from '../lib/governance';
 import type { ControlMessage, WorkflowJobEvent } from '../lib/types';
 
 const sqs = new SQSClient({ region: process.env.MAYFLY_REGION });
@@ -57,6 +58,18 @@ export async function handler(event: FunctionUrlEvent): Promise<FunctionUrlResul
   const repo = payload.repository.name;
   const installationId = payload.installation?.id ?? 0;
   const jobId = String(job.id);
+
+  // Tenancy gate: only serve repos this deployment is authorized for. An App installed
+  // on an unexpected repo must not spin up MicroVMs on the deployer's account.
+  const policy = {
+    allowedOwners: cfg.allowedOwners,
+    allowedRepos: cfg.allowedRepos,
+    allowAll: cfg.allowAll,
+  };
+  if (!isAllowed(owner, repo, policy)) {
+    console.log(`[webhook] rejected: ${owner}/${repo} not in allowlist`);
+    return { statusCode: 200, body: 'not authorized' };
+  }
 
   if (action === 'queued') {
     // Provision only for jobs whose runs-on requests all of our configured labels.

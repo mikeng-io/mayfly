@@ -21,12 +21,14 @@ export interface JobsRepoOptions {
 }
 
 export interface JobsRepo {
-  beginProvisioning(jobId: string, runId: number): Promise<'proceed' | 'skip'>;
+  beginProvisioning(jobId: string, runId: number, owner?: string): Promise<'proceed' | 'skip'>;
   attachMicrovm(jobId: string, microvmId: string, endpoint: string): Promise<void>;
   markRunning(jobId: string, runnerName?: string, trust?: 'internal' | 'fork'): Promise<void>;
   getJob(jobId: string): Promise<JobRecord | undefined>;
   deleteJob(jobId: string): Promise<void>;
   listByState(state: JobState): Promise<JobRecord[]>;
+  /** Count active (provisioning+running) MicroVMs held by one owner (per-owner quota). */
+  countActiveByOwner(owner: string): Promise<number>;
   setFirstSeenOverdue(jobId: string): Promise<number>;
 }
 
@@ -41,17 +43,31 @@ export function createJobsRepo(opts: JobsRepoOptions): JobsRepo {
   const now = opts.now ?? (() => Math.floor(Date.now() / 1000));
   const T = opts.table;
 
+  const queryByState = async (state: JobState): Promise<JobRecord[]> => {
+    const res = await db.send(
+      new QueryCommand({
+        TableName: T,
+        IndexName: opts.stateIndex,
+        KeyConditionExpression: '#s = :s',
+        ExpressionAttributeNames: { '#s': 'state' },
+        ExpressionAttributeValues: { ':s': state },
+      }),
+    );
+    return (res.Items ?? []) as JobRecord[];
+  };
+
   return {
     /**
      * Re-drivable claim. Succeeds ("proceed") only if no record exists, or an existing
      * `provisioning` record is stale (a crashed prior attempt). A fresh `provisioning`
      * or a `running` record → "skip", which dedupes SQS at-least-once redelivery.
      */
-    async beginProvisioning(jobId, runId) {
+    async beginProvisioning(jobId, runId, owner) {
       const t = now();
       const rec: JobRecord = {
         jobId,
         runId,
+        owner,
         state: 'provisioning',
         createdAt: t,
         updatedAt: t,
@@ -120,17 +136,11 @@ export function createJobsRepo(opts: JobsRepoOptions): JobsRepo {
       await db.send(new DeleteCommand({ TableName: T, Key: { jobId } }));
     },
 
-    async listByState(state) {
-      const res = await db.send(
-        new QueryCommand({
-          TableName: T,
-          IndexName: opts.stateIndex,
-          KeyConditionExpression: '#s = :s',
-          ExpressionAttributeNames: { '#s': 'state' },
-          ExpressionAttributeValues: { ':s': state },
-        }),
-      );
-      return (res.Items ?? []) as JobRecord[];
+    listByState: queryByState,
+
+    async countActiveByOwner(owner) {
+      const active = [...(await queryByState('provisioning')), ...(await queryByState('running'))];
+      return active.filter((r) => r.owner === owner).length;
     },
 
     /** Set the reconciler's grace-window marker once; returns the effective marker time. */

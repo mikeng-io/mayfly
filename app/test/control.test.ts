@@ -12,6 +12,7 @@ function jobs(over: Partial<JobsRepo> = {}): JobsRepo {
     getJob: vi.fn().mockResolvedValue(undefined),
     deleteJob: vi.fn().mockResolvedValue(undefined),
     listByState: vi.fn().mockResolvedValue([]),
+    countActiveByOwner: vi.fn().mockResolvedValue(0),
     setFirstSeenOverdue: vi.fn().mockResolvedValue(0),
     ...over,
   } as unknown as JobsRepo;
@@ -48,6 +49,9 @@ function deps(over: Partial<ControlDeps> = {}): ControlDeps {
     github: github(),
     loadAppCreds: vi.fn().mockResolvedValue({ appId: '1', privateKey: 'pem' }),
     imageName: 'mayfly-runner',
+    perOwnerConcurrency: 10,
+    maxRequeues: 5,
+    requeue: vi.fn().mockResolvedValue(undefined),
     sleep: async () => {},
     ...over,
   };
@@ -133,6 +137,37 @@ test('RunMicrovm throttling is retried, then succeeds', async () => {
   await processMessage(provisionMsg, d);
   expect(runMicrovm).toHaveBeenCalledTimes(2);
   expect(d.jobs.attachMicrovm).toHaveBeenCalledWith('987', 'mvm-1', 'ep');
+});
+
+test('over per-owner quota: requeue with attempts++ instead of launching', async () => {
+  const d = deps({
+    jobs: jobs({ countActiveByOwner: vi.fn().mockResolvedValue(10) }),
+    perOwnerConcurrency: 10,
+  });
+  await processMessage(provisionMsg, d);
+  expect(d.requeue).toHaveBeenCalledOnce();
+  const [msg] = (d.requeue as any).mock.calls[0];
+  expect(msg.attempts).toBe(1);
+  expect(d.jobs.beginProvisioning).not.toHaveBeenCalled();
+  expect(d.microvm.runMicrovm).not.toHaveBeenCalled();
+});
+
+test('quota requeues are bounded: dropped after maxRequeues (no requeue, no launch)', async () => {
+  const d = deps({
+    jobs: jobs({ countActiveByOwner: vi.fn().mockResolvedValue(10) }),
+    perOwnerConcurrency: 10,
+    maxRequeues: 5,
+  });
+  await processMessage({ ...provisionMsg, attempts: 5 }, d);
+  expect(d.requeue).not.toHaveBeenCalled();
+  expect(d.jobs.beginProvisioning).not.toHaveBeenCalled();
+});
+
+test('under quota: provisions normally', async () => {
+  const d = deps({ jobs: jobs({ countActiveByOwner: vi.fn().mockResolvedValue(3) }) });
+  await processMessage(provisionMsg, d);
+  expect(d.requeue).not.toHaveBeenCalled();
+  expect(d.microvm.runMicrovm).toHaveBeenCalledOnce();
 });
 
 test('teardown terminates the recorded VM and deletes the record', async () => {

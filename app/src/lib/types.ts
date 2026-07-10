@@ -29,6 +29,8 @@ export type JobState = 'provisioning' | 'running' | 'done';
 export interface JobRecord {
   jobId: string;
   runId: number;
+  /** Repo owner (org/user login) — used for per-owner concurrency quota. */
+  owner?: string;
   state: JobState;
   microvmId?: string;
   endpoint?: string;
@@ -50,6 +52,8 @@ export type ControlMessage =
       owner: string;
       repo: string;
       labels: string[];
+      /** Requeue counter for per-owner quota backpressure. */
+      attempts?: number;
     }
   | {
       type: 'teardown';

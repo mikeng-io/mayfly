@@ -28,12 +28,20 @@ const MICROVM_ACTIONS = [
   'lambda-microvms:CreateMicrovmAuthToken',
 ];
 
-/** Target repo + runner labels + image name. Overridable per-deploy; sane v1 defaults. */
+/** Per-deploy config: image name, runner labels, and tenancy governance. Sane v1 defaults. */
 export interface MayflyStackProps extends StackProps {
   imageName?: string;
-  repoOwner?: string;
-  repoName?: string;
   labels?: string[];
+  /** Owners (org/user logins) this deployment serves. */
+  allowedOwners?: string[];
+  /** Exact `owner/repo` entries this deployment serves. */
+  allowedRepos?: string[];
+  /** Escape hatch: serve every repo the App is installed on. */
+  allowAll?: boolean;
+  /** Max concurrent MicroVMs per owner. */
+  perOwnerConcurrency?: number;
+  /** Requeue budget for over-quota provisions. */
+  maxRequeues?: number;
 }
 
 const APP_ROOT = path.join(__dirname, '..', '..');
@@ -70,9 +78,12 @@ export class MayflyStack extends Stack {
     super(scope, id, props);
 
     const imageName = props?.imageName ?? 'mayfly-runner';
-    const repoOwner = props?.repoOwner ?? 'mikeng-io';
-    const repoName = props?.repoName ?? 'mayfly-test';
     const labels = props?.labels ?? ['self-hosted', 'mayfly'];
+    const allowedOwners = props?.allowedOwners ?? ['mikeng-io'];
+    const allowedRepos = props?.allowedRepos ?? [];
+    const allowAll = props?.allowAll ?? false;
+    const perOwnerConcurrency = props?.perOwnerConcurrency ?? 10;
+    const maxRequeues = props?.maxRequeues ?? 5;
 
     // --- State: correlation table (PK jobId) + GSI on state for the reconciler ---
     this.jobsTable = new dynamodb.Table(this, 'JobsTable', {
@@ -162,9 +173,12 @@ export class MayflyStack extends Stack {
       JOBS_TABLE: this.jobsTable.tableName,
       JOBS_STATE_INDEX: JOBS_STATE_INDEX,
       QUEUE_URL: this.queue.queueUrl,
-      REPO_OWNER: repoOwner,
-      REPO_NAME: repoName,
       LABELS: labels.join(','),
+      ALLOWED_OWNERS: allowedOwners.join(','),
+      ALLOWED_REPOS: allowedRepos.join(','),
+      ALLOW_ALL: String(allowAll),
+      PER_OWNER_CONCURRENCY: String(perOwnerConcurrency),
+      MAX_REQUEUES: String(maxRequeues),
       WEBHOOK_SECRET_PARAM: this.webhookSecretParam.parameterName,
       APP_ID_PARAM: this.appIdParam.parameterName,
       APP_KEY_PARAM: this.appPrivateKey.secretName,
@@ -211,6 +225,7 @@ export class MayflyStack extends Stack {
       depsLockFilePath: DEPS_LOCK,
     });
     this.controlFn.addEventSource(new SqsEventSource(this.queue, { batchSize: 1 }));
+    this.queue.grantSendMessages(this.controlFn); // re-queue over-quota provisions
     this.jobsTable.grantReadWriteData(this.controlFn);
     this.appIdParam.grantRead(this.controlFn);
     this.appPrivateKey.grantRead(this.controlFn);

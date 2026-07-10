@@ -24,6 +24,24 @@ npm run deploy          # writes app/cdk-outputs.json (incl. the webhook Functio
 This stands up everything (DynamoDB, SQS+DLQ, three Lambdas, the webhook Function URL, alarms,
 the 2-minute reconciler). Nothing runs until a GitHub App points at it.
 
+#### Configure who it serves (tenancy governance)
+
+Mayfly runs jobs in **your** account, so it only serves repos you authorize. Set these on the stack
+(`infra/bin/mayfly.ts` props) — sane defaults shown:
+
+| Prop | Env | Default | Meaning |
+|---|---|---|---|
+| `allowedOwners` | `ALLOWED_OWNERS` | `['mikeng-io']` | org/user logins whose repos are served |
+| `allowedRepos` | `ALLOWED_REPOS` | `[]` | exact `owner/repo` entries served |
+| `allowAll` | `ALLOW_ALL` | `false` | serve every repo the App is installed on (personal setups) |
+| `perOwnerConcurrency` | `PER_OWNER_CONCURRENCY` | `10` | max concurrent MicroVMs one owner may hold |
+| `maxRequeues` | `MAX_REQUEUES` | `5` | over-quota jobs are delayed-requeued this many times, then dropped |
+
+**Fail-closed:** with no owners/repos and `allowAll=false`, nothing is served — an App installed on an
+unexpected repo can't spin up MicroVMs on your bill. A repo outside the allowlist is logged and ignored
+(the webhook returns 200 without enqueuing). Over-quota jobs are re-queued with a delay (backpressure),
+not dropped, until the requeue budget is exhausted.
+
 ### 2. Create the GitHub App — one button
 
 ```bash

@@ -1,3 +1,4 @@
+import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
 import { loadConfig, getSecret, getSecretsManagerValue } from '../lib/config';
 import { createJobsRepo, type JobsRepo } from '../lib/jobs';
 import { createMicrovmClient, type MicrovmClient } from '../lib/microvm';
@@ -14,6 +15,9 @@ import type { ControlMessage } from '../lib/types';
 /** How long a completed/abandoned record lingers (DynamoDB TTL) — well past max runtime. */
 const RECORD_TTL_SECONDS = 24 * 60 * 60;
 
+/** Delay before a quota-deferred provision is retried. */
+const REQUEUE_DELAY_SECONDS = 60;
+
 export interface GithubApi {
   appJwt: typeof appJwt;
   installationToken: typeof installationToken;
@@ -28,6 +32,11 @@ export interface ControlDeps {
   github: GithubApi;
   loadAppCreds: () => Promise<{ appId: string; privateKey: string }>;
   imageName: string;
+  /** Max concurrent MicroVMs one owner may hold; over-quota provisions are re-queued. */
+  perOwnerConcurrency: number;
+  /** Re-queue an over-quota provision (delayed) instead of launching now. */
+  requeue: (msg: ControlMessage, delaySeconds: number) => Promise<void>;
+  maxRequeues: number;
   sleep?: (ms: number) => Promise<void>;
   retries?: number;
 }
@@ -57,8 +66,24 @@ async function withThrottleRetry<T>(
 }
 
 async function provision(msg: Extract<ControlMessage, { type: 'provision' }>, deps: ControlDeps): Promise<void> {
+  // 0. Per-owner quota (fairness/abuse): if the owner is at their cap, defer this job via a
+  //    delayed re-queue rather than launching — natural backpressure that doesn't burn the SQS
+  //    retry/DLQ budget. Bounded by maxRequeues so it can't loop forever.
+  const active = await deps.jobs.countActiveByOwner(msg.owner);
+  if (active >= deps.perOwnerConcurrency) {
+    const attempts = (msg.attempts ?? 0) + 1;
+    if (attempts <= deps.maxRequeues) {
+      await deps.requeue({ ...msg, attempts }, REQUEUE_DELAY_SECONDS);
+      return;
+    }
+    console.warn(
+      `[control] quota: dropping job ${msg.jobId} for ${msg.owner} after ${attempts - 1} requeues (limit ${deps.perOwnerConcurrency})`,
+    );
+    return;
+  }
+
   // 1. Re-drivable idempotency claim. "skip" = SQS redelivery / already handled.
-  if ((await deps.jobs.beginProvisioning(msg.jobId, msg.runId)) === 'skip') return;
+  if ((await deps.jobs.beginProvisioning(msg.jobId, msg.runId, msg.owner)) === 'skip') return;
 
   // 2. Auth + re-check the run is still queued (handles completed-before-provision).
   const { appId, privateKey } = await deps.loadAppCreds();
@@ -122,6 +147,7 @@ export async function processMessage(msg: ControlMessage, deps: ControlDeps): Pr
 
 function buildDeps(): ControlDeps {
   const cfg = loadConfig();
+  const sqs = new SQSClient({ region: cfg.region });
   return {
     jobs: createJobsRepo({
       table: cfg.jobsTable,
@@ -137,6 +163,17 @@ function buildDeps(): ControlDeps {
       privateKey: await getSecretsManagerValue(cfg.appKeyParam),
     }),
     imageName: cfg.imageName,
+    perOwnerConcurrency: cfg.perOwnerConcurrency,
+    maxRequeues: cfg.maxRequeues,
+    requeue: async (m, delaySeconds) => {
+      await sqs.send(
+        new SendMessageCommand({
+          QueueUrl: cfg.queueUrl,
+          MessageBody: JSON.stringify(m),
+          DelaySeconds: delaySeconds,
+        }),
+      );
+    },
   };
 }
 
