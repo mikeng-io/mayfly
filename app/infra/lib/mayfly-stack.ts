@@ -1,4 +1,4 @@
-import { Stack, StackProps, RemovalPolicy, Duration } from 'aws-cdk-lib';
+import { Stack, StackProps, RemovalPolicy, Duration, CfnOutput } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as path from 'node:path';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
@@ -236,6 +236,12 @@ export class MayflyStack extends Stack {
       schedule: events.Schedule.rate(Duration.minutes(2)),
       targets: [new targets.LambdaFunction(this.reconcilerFn)],
     });
+
+    // --- Outputs consumed by the setup tool (scripts/setup-app.ts) ---
+    new CfnOutput(this, 'WebhookUrl', { value: this.webhookUrl.url, description: 'GitHub App webhook target' });
+    new CfnOutput(this, 'WebhookSecretParamName', { value: this.webhookSecretParam.parameterName });
+    new CfnOutput(this, 'AppIdParamName', { value: this.appIdParam.parameterName });
+    new CfnOutput(this, 'AppKeySecretName', { value: this.appPrivateKey.secretName ?? '' });
 
     this.applyNagSuppressions();
   }
