@@ -1,6 +1,6 @@
 # Runbook — Phase 6: deploy + live integration (Mayfly control plane)
 
-- **Account:** 163703054402 · **Region:** ap-northeast-1 (Tokyo) · **Repo under test:** `mikeng-io/mayfly-demo`
+- **Account:** <ACCOUNT_ID> · **Region:** ap-northeast-1 (Tokyo) · **Repo under test:** `mikeng-io/mayfly-demo`
 - **Cost:** a few cents (short MicroVM runs) + tiny snapshot storage while the image exists + ~$0 idle infra + ~$0.40/mo per Secrets Manager secret. Net footprint after teardown ≈ $0.
 - **Everything is CDK-managed** — no manual AWS resource creation. Record anything live in `app/AWS-LEDGER.md`.
 
@@ -12,7 +12,7 @@
 ## 0. Preconditions (check once)
 
 ```bash
-# Right account? MUST be 163703054402 (ambient creds have been a different account before).
+# Right account? MUST be <ACCOUNT_ID> (ambient creds have been a different account before).
 aws sts get-caller-identity --query Account --output text
 # CLI knows the service? MUST be >= ~2.28 (lambda-microvms GA'd 2026-06-22).
 aws --version
@@ -22,7 +22,7 @@ node --version   # >= 20     docker version     jq --version     zip -v >/dev/nu
 aws cloudformation describe-stacks --stack-name CDKToolkit --region ap-northeast-1 --query 'Stacks[0].StackStatus' --output text
 ```
 
-- [ ] Account = 163703054402
+- [ ] Account = <ACCOUNT_ID>
 - [ ] AWS creds present in repo `.env` (sourced by `build-image.sh`)
 - [ ] `mikeng-io/mayfly-demo` has a workflow with `runs-on: [self-hosted, mayfly]` (e.g. reuse `spike/phase2-aws/workflows/mayfly-spike.yml`)
 - [ ] **GitHub PAT rotated** (a fragment was pasted in chat earlier — still pending)
@@ -155,7 +155,7 @@ aws lambda-microvms list-microvms --region ap-northeast-1 --query 'length(items)
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| `sts get-caller-identity` ≠ 163703054402 | ambient creds wrong account | source repo `.env`; re-check before deploy |
+| `sts get-caller-identity` ≠ <ACCOUNT_ID> | ambient creds wrong account | source repo `.env`; re-check before deploy |
 | image build → `CREATION_FAILED` | `/ready` hook/port | check `/aws/lambda/microvms/mayfly-runner` logs; set `MAYFLY_HOOKS_ARGS`; re-run |
 | webhook 401 | SSM `webhookSecret` ≠ App's secret | re-run `setup-app` (rewrites the secret) |
 | job never provisions | owner not allow-listed, or labels mismatch | check `allowedOwners`; confirm `runs-on` labels; read control logs + DLQ |

@@ -23,7 +23,7 @@ Control plane + demo API are live; the public demo is up. AWS is at ~$0 idle (0 
 
 ## Live endpoints
 
-- Webhook Function URL: `https://tszbder3gu3lnbefrzx2eyponi0njqdw.lambda-url.ap-northeast-1.on.aws/`
+- Webhook Function URL: `https://<redacted>.lambda-url.ap-northeast-1.on.aws/`
 - Demo API: `https://fc4ueyqlq7a5krr7vu73r2dcqq0ygoaa.lambda-url.ap-northeast-1.on.aws/`
 - Public demo site: https://mikeng-io.github.io/mayfly-demo/
 

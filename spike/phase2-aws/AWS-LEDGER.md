@@ -1,6 +1,6 @@
 # AWS resource ledger — Mayfly Phase 2 spike
 
-**Account:** 163703054402 (`user/mike.ng`) · **Region:** ap-northeast-1 (Tokyo) · **Started:** 2026-07-09
+**Account:** <ACCOUNT_ID> (`<iam-user>`) · **Region:** ap-northeast-1 (Tokyo) · **Started:** 2026-07-09
 
 > Live record of everything created **directly in AWS** for this spike, so teardown never
 > requires CloudTrail archaeology. Updated as we go. Cost intent: minimal, torn down after.
@@ -9,7 +9,7 @@
 
 | # | When (2026-07-09) | Resource | Created by | Est. cost | How to destroy |
 |---|------|----------|-----------|-----------|----------------|
-| 1 | 15:31 JST | **CDKToolkit** CFN stack, ap-northeast-1 (staging S3 bucket, ECR repo, IAM roles) | `cdk bootstrap aws://163703054402/ap-northeast-1` | ~$0 (empty) | delete the `CDKToolkit` CloudFormation stack (or keep — standard CDK) |
+| 1 | 15:31 JST | **CDKToolkit** CFN stack, ap-northeast-1 (staging S3 bucket, ECR repo, IAM roles) | `cdk bootstrap aws://<ACCOUNT_ID>/ap-northeast-1` | ~$0 (empty) | delete the `CDKToolkit` CloudFormation stack (or keep — standard CDK) |
 | 2 | 15:33 JST | **MayflySpikeStack** CFN stack: S3 bucket `mayflyspikestack-artifactbucket7410c9ef-zn44dfsrfsja` + IAM role `MayflySpikeStack-MicrovmBuildRoleA8840453-sx3Z9kGH6uQg` + an auto-delete Lambda | `cdk deploy` | ~$0 | `cd infra && npm run destroy` |
 | 3 | 17:02 JST | MicroVM **image** `mayfly-diag` (arn:…:microvm-image:mayfly-diag) — building | `aws lambda-microvms create-microvm-image` (no --hooks; the --hooks shorthand caused a bogus 403) | snapshot storage | `aws lambda-microvms delete-microvm-image --image-identifier mayfly-diag --region ap-northeast-1` |
 | 4 | 17:3x JST | MicroVM **run** `microvm-0abca5c5-9571-3ac8-a466-75c660cc8a96` (SAFE experiment) — **terminated** | `run-spike-aws.sh` | ~few ¢ | already terminated (manually — a `set -u` bug skipped the auto-terminate; killed via `terminate-microvm`) |
