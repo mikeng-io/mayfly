@@ -26,6 +26,11 @@ import (
 
 type runReq struct {
 	JitConfig string `json:"jitconfig"`
+	// MicrovmID is handed to us by the control plane. Every VM is restored from one
+	// build snapshot, so nothing the kernel set at boot (boot_id, machine-id, hostname)
+	// differs between VMs — this is the only value in the guest that identifies which
+	// MicroVM this is, and it can only come from outside.
+	MicrovmID string `json:"microvmId"`
 }
 
 var (
@@ -97,6 +102,8 @@ func handleJit(w http.ResponseWriter, r *http.Request) {
 		}
 		cmd := exec.Command("/actions-runner/run.sh", "--jitconfig", req.JitConfig)
 		cmd.Dir = "/actions-runner"
+		// Expose the VM's identity to the job. Steps read $MAYFLY_MICROVM_ID.
+		cmd.Env = append(os.Environ(), "MAYFLY_MICROVM_ID="+req.MicrovmID)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		code := 0

@@ -85,6 +85,7 @@ test('postJit POSTs the jitconfig with auth + port-8080 headers', async () => {
     'ep.example',
     { 'X-aws-proxy-auth': 'tok' },
     'ENCODED',
+    'mvm-1',
   );
   const [url, init] = fetchImpl.mock.calls[0];
   expect(url).toBe('https://ep.example/jit');
@@ -93,10 +94,21 @@ test('postJit POSTs the jitconfig with auth + port-8080 headers', async () => {
   expect(JSON.parse(init.body).jitconfig).toBe('ENCODED');
 });
 
+test('postJit tells the VM which VM it is (it cannot work this out itself)', async () => {
+  const fetchImpl = vi.fn().mockResolvedValue({ ok: true, status: 202 });
+  await mv({ fetchImpl: fetchImpl as unknown as typeof fetch }).postJit(
+    'ep.example',
+    {},
+    'ENCODED',
+    'mvm-abc',
+  );
+  expect(JSON.parse(fetchImpl.mock.calls[0][1].body).microvmId).toBe('mvm-abc');
+});
+
 test('postJit throws on a non-ok endpoint response', async () => {
   const fetchImpl = vi.fn().mockResolvedValue({ ok: false, status: 500 });
   await expect(
-    mv({ fetchImpl: fetchImpl as unknown as typeof fetch }).postJit('ep', {}, 'X'),
+    mv({ fetchImpl: fetchImpl as unknown as typeof fetch }).postJit('ep', {}, 'X', 'mvm-1'),
   ).rejects.toThrow(/postJit failed: 500/);
 });
 

@@ -6,6 +6,8 @@ export interface Config {
   imageName: string;
   jobsTable: string;
   jobsStateIndex: string;
+  /** Durable (microvmId -> runnerName) evidence table. */
+  attestationsTable: string;
   queueUrl: string;
   labels: string[];
   webhookSecretParam: string;
@@ -46,6 +48,7 @@ export function loadConfig(): Config {
     imageName: req('IMAGE_NAME'),
     jobsTable: req('JOBS_TABLE'),
     jobsStateIndex: process.env.JOBS_STATE_INDEX ?? 'state-index',
+    attestationsTable: req('ATTESTATIONS_TABLE'),
     queueUrl: req('QUEUE_URL'),
     labels: csv('LABELS'),
     webhookSecretParam: req('WEBHOOK_SECRET_PARAM'),

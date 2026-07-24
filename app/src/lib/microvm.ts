@@ -35,7 +35,12 @@ export interface MicrovmClient {
   waitRunning(microvmId: string, opts?: { timeoutMs?: number; intervalMs?: number }): Promise<void>;
   getMicrovm(microvmId: string): Promise<MicrovmInfo>;
   authToken(microvmId: string): Promise<Record<string, string>>;
-  postJit(endpoint: string, authHeaders: Record<string, string>, encodedJit: string): Promise<void>;
+  postJit(
+    endpoint: string,
+    authHeaders: Record<string, string>,
+    encodedJit: string,
+    microvmId: string,
+  ): Promise<void>;
   terminate(microvmId: string): Promise<void>;
 }
 
@@ -124,11 +129,17 @@ export function createMicrovmClient(opts: MicrovmClientOptions): MicrovmClient {
       return res.authToken;
     },
 
-    async postJit(endpoint, authHeaders, encodedJit) {
+    /**
+     * Hand the VM its JIT config, and its own identity alongside it. The guest cannot
+     * derive that identity for itself: every VM is restored from one build snapshot, so
+     * anything the kernel set at boot (boot_id, machine-id, hostname) is identical across
+     * all of them. The control plane is the only party that knows which VM this is.
+     */
+    async postJit(endpoint, authHeaders, encodedJit, microvmId) {
       const res = await doFetch(`https://${endpoint}/jit`, {
         method: 'POST',
         headers: { ...authHeaders, 'X-aws-proxy-port': '8080', 'content-type': 'application/json' },
-        body: JSON.stringify({ jitconfig: encodedJit }),
+        body: JSON.stringify({ jitconfig: encodedJit, microvmId }),
       });
       if (!res.ok) throw new Error(`postJit failed: ${res.status}`);
     },

@@ -2,6 +2,7 @@ import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
 import { CloudWatchClient, PutMetricDataCommand } from '@aws-sdk/client-cloudwatch';
 import { loadConfig, getSecret, getSecretsManagerValue } from '../lib/config';
 import { createJobsRepo, type JobsRepo } from '../lib/jobs';
+import { createAttestationsRepo, type AttestationsRepo } from '../lib/attestations';
 import { createMicrovmClient, type MicrovmClient } from '../lib/microvm';
 import {
   appJwt,
@@ -16,6 +17,13 @@ import type { ControlMessage } from '../lib/types';
 /** How long a completed/abandoned record lingers (DynamoDB TTL) — well past max runtime. */
 const RECORD_TTL_SECONDS = 24 * 60 * 60;
 
+/**
+ * How long VM-identity evidence is kept. Long enough that a claim made in a write-up
+ * can still be checked against it — the jobs table's 24h would have expired before
+ * anyone went looking.
+ */
+const ATTESTATION_TTL_SECONDS = 30 * 24 * 60 * 60;
+
 /** Delay before a quota-deferred provision is retried. */
 const REQUEUE_DELAY_SECONDS = 60;
 
@@ -29,6 +37,8 @@ export interface GithubApi {
 
 export interface ControlDeps {
   jobs: JobsRepo;
+  /** Durable (microvmId -> runnerName) evidence; outlives the job record. */
+  attestations: AttestationsRepo;
   microvm: MicrovmClient;
   github: GithubApi;
   loadAppCreds: () => Promise<{ appId: string; privateKey: string }>;
@@ -135,7 +145,10 @@ async function provision(msg: Extract<ControlMessage, { type: 'provision' }>, de
     const auth = await deps.microvm.authToken(microvmId);
     const runnerName = `mayfly-${msg.jobId}`;
     const jit = await deps.github.generateJitConfig(token, msg.owner, msg.repo, runnerName, msg.labels);
-    await deps.microvm.postJit(endpoint, auth, jit);
+    await deps.microvm.postJit(endpoint, auth, jit, microvmId);
+    // Attest the pairing BEFORE the job can emit anything. A receipt naming this
+    // microvmId is then checkable against a record that predates the job's output.
+    await deps.attestations.record({ microvmId, jobId: msg.jobId, runnerName, endpoint, trust });
     await deps.jobs.markRunning(msg.jobId, runnerName, trust);
     console.log(`[control] running job=${msg.jobId} microvm=${microvmId} runner=${runnerName}`);
   } catch (e) {
@@ -147,7 +160,12 @@ async function provision(msg: Extract<ControlMessage, { type: 'provision' }>, de
 
 async function teardown(msg: Extract<ControlMessage, { type: 'teardown' }>, deps: ControlDeps): Promise<void> {
   const rec = await deps.jobs.getJob(msg.jobId);
-  if (rec?.microvmId) await deps.microvm.terminate(rec.microvmId);
+  if (rec?.microvmId) {
+    await deps.microvm.terminate(rec.microvmId);
+    // Stamp, don't delete. The job record goes away below because the state machine is
+    // done with it; the evidence that this VM served this runner has to outlive it.
+    await deps.attestations.markTerminated(rec.microvmId);
+  }
   await deps.jobs.deleteJob(msg.jobId);
   console.log(`[control] teardown job=${msg.jobId} microvm=${rec?.microvmId ?? 'none'}`);
 }
@@ -168,6 +186,11 @@ function buildDeps(): ControlDeps {
       stateIndex: cfg.jobsStateIndex,
       provisionTtlSeconds: cfg.provisionTtlSeconds,
       recordTtlSeconds: RECORD_TTL_SECONDS,
+      region: cfg.region,
+    }),
+    attestations: createAttestationsRepo({
+      table: cfg.attestationsTable,
+      ttlSeconds: ATTESTATION_TTL_SECONDS,
       region: cfg.region,
     }),
     microvm: createMicrovmClient({ region: cfg.region, maxRuntimeSeconds: cfg.maxRuntimeSeconds }),

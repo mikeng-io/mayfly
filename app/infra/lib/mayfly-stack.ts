@@ -63,6 +63,7 @@ export const JOBS_STATE_INDEX = 'state-index';
  */
 export class MayflyStack extends Stack {
   readonly jobsTable: dynamodb.Table;
+  readonly attestationsTable: dynamodb.Table;
   readonly queue: sqs.Queue;
   readonly deadLetterQueue: sqs.Queue;
   readonly webhookSecretParam: ssm.StringParameter;
@@ -100,6 +101,19 @@ export class MayflyStack extends Stack {
       indexName: JOBS_STATE_INDEX,
       partitionKey: { name: 'state', type: dynamodb.AttributeType.STRING },
       projectionType: dynamodb.ProjectionType.ALL,
+    });
+
+    // --- Evidence: which MicroVM served which runner (PK microvmId) ---
+    // Separate from JobsTable because the two have opposite lifetimes: job records are
+    // deleted at teardown (the state machine is done), while this has to survive so the
+    // "one fresh VM per job" claim stays checkable after the fact. RETAIN, because
+    // evidence you can destroy by redeploying a stack is not evidence.
+    this.attestationsTable = new dynamodb.Table(this, 'AttestationsTable', {
+      partitionKey: { name: 'microvmId', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+      timeToLiveAttribute: 'expiresAt',
+      removalPolicy: RemovalPolicy.RETAIN,
     });
 
     // --- Queue: webhook -> control, with a short delay + DLQ ---
@@ -188,6 +202,7 @@ export class MayflyStack extends Stack {
       MAYFLY_REGION: this.region,
       IMAGE_NAME: imageName,
       JOBS_TABLE: this.jobsTable.tableName,
+      ATTESTATIONS_TABLE: this.attestationsTable.tableName,
       JOBS_STATE_INDEX: JOBS_STATE_INDEX,
       QUEUE_URL: this.queue.queueUrl,
       LABELS: labels.join(','),
@@ -248,6 +263,7 @@ export class MayflyStack extends Stack {
     this.controlFn.addEventSource(new SqsEventSource(this.queue, { batchSize: 1 }));
     this.queue.grantSendMessages(this.controlFn); // re-queue over-quota provisions
     this.jobsTable.grantReadWriteData(this.controlFn);
+    this.attestationsTable.grantReadWriteData(this.controlFn);
     this.appIdParam.grantRead(this.controlFn);
     this.appPrivateKey.grantRead(this.controlFn);
     this.controlFn.addToRolePolicy(
@@ -271,6 +287,7 @@ export class MayflyStack extends Stack {
       depsLockFilePath: DEPS_LOCK,
     });
     this.jobsTable.grantReadWriteData(this.reconcilerFn);
+    this.attestationsTable.grantReadWriteData(this.reconcilerFn);
     this.reconcilerFn.addToRolePolicy(
       new iam.PolicyStatement({ actions: MICROVM_ACTIONS, resources: ['*'] }),
     );
