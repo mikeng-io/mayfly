@@ -67,11 +67,40 @@ test('get returns the record for cross-checking a receipt', async () => {
   expect(rec?.runnerName).toBe('mayfly-987');
 });
 
-test('distinct jobs produce distinct attested VMs (the claim the demo makes)', async () => {
+test('record is write-once: it cannot overwrite an existing attestation', async () => {
   ddb.on(PutCommand).resolves({});
-  const r = repo();
-  await r.record({ microvmId: 'mvm-1', jobId: '1', runnerName: 'mayfly-1', trust: 'internal' });
-  await r.record({ microvmId: 'mvm-2', jobId: '2', runnerName: 'mayfly-2', trust: 'internal' });
-  const ids = ddb.commandCalls(PutCommand).map((c) => c.args[0].input.Item!.microvmId);
-  expect(new Set(ids).size).toBe(2);
+  await repo().record({ microvmId: 'mvm-1', jobId: '1', runnerName: 'mayfly-1', trust: 'internal' });
+  // Without this condition a re-drive would reset launchedAt and erase terminatedAt,
+  // silently rewriting the evidence it exists to preserve.
+  expect(ddb.commandCalls(PutCommand)[0].args[0].input.ConditionExpression).toBe(
+    'attribute_not_exists(microvmId)',
+  );
+});
+
+test('re-attesting the same VM is tolerated (redelivery) but does not throw', async () => {
+  const err = new Error('exists');
+  err.name = 'ConditionalCheckFailedException';
+  ddb.on(PutCommand).rejects(err);
+  await expect(
+    repo().record({ microvmId: 'mvm-1', jobId: '1', runnerName: 'mayfly-1', trust: 'internal' }),
+  ).resolves.toBeUndefined();
+});
+
+test('record surfaces real write failures so the provision aborts', async () => {
+  ddb.on(PutCommand).rejects(new Error('throttled'));
+  await expect(
+    repo().record({ microvmId: 'mvm-1', jobId: '1', runnerName: 'mayfly-1', trust: 'internal' }),
+  ).rejects.toThrow('throttled');
+});
+
+test('the first termination stamp is authoritative', async () => {
+  ddb.on(UpdateCommand).resolves({});
+  await repo().markTerminated('mvm-1');
+  expect(ddb.commandCalls(UpdateCommand)[0].args[0].input.ConditionExpression).toContain(
+    'attribute_not_exists(terminatedAt)',
+  );
+});
+
+test('a repo built without a table name fails loudly at construction', () => {
+  expect(() => createAttestationsRepo({ table: '', ttlSeconds: TTL })).toThrow(/ATTESTATIONS_TABLE/);
 });

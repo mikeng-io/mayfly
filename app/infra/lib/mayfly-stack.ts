@@ -263,7 +263,10 @@ export class MayflyStack extends Stack {
     this.controlFn.addEventSource(new SqsEventSource(this.queue, { batchSize: 1 }));
     this.queue.grantSendMessages(this.controlFn); // re-queue over-quota provisions
     this.jobsTable.grantReadWriteData(this.controlFn);
-    this.attestationsTable.grantReadWriteData(this.controlFn);
+    // Deliberately NOT grantReadWriteData: that includes DeleteItem/BatchWriteItem, and a
+    // table whose whole point is that evidence cannot be destroyed should not hand delete
+    // rights to the roles that write it. Control writes and closes; nothing deletes.
+    this.attestationsTable.grant(this.controlFn, 'dynamodb:PutItem', 'dynamodb:UpdateItem');
     this.appIdParam.grantRead(this.controlFn);
     this.appPrivateKey.grantRead(this.controlFn);
     this.controlFn.addToRolePolicy(
@@ -287,7 +290,7 @@ export class MayflyStack extends Stack {
       depsLockFilePath: DEPS_LOCK,
     });
     this.jobsTable.grantReadWriteData(this.reconcilerFn);
-    this.attestationsTable.grantReadWriteData(this.reconcilerFn);
+    this.attestationsTable.grant(this.reconcilerFn, 'dynamodb:UpdateItem'); // stamps only
     this.reconcilerFn.addToRolePolicy(
       new iam.PolicyStatement({ actions: MICROVM_ACTIONS, resources: ['*'] }),
     );

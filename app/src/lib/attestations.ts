@@ -52,19 +52,36 @@ function client(region?: string): DynamoDBDocumentClient {
 }
 
 export function createAttestationsRepo(opts: AttestationsRepoOptions): AttestationsRepo {
+  if (!opts.table) throw new Error('Missing required env var: ATTESTATIONS_TABLE');
   const db = client(opts.region);
   const now = opts.now ?? (() => Math.floor(Date.now() / 1000));
   const T = opts.table;
 
   return {
+    /**
+     * Write-once. A bare Put would replace the whole item, so a re-drive landing on the
+     * same microvmId (RunMicrovm is idempotent on clientToken=jobId, so it can return a
+     * VM we already attested) would reset launchedAt and erase terminatedAt — an evidence
+     * store that silently rewrites history. The first write wins.
+     */
     async record(a) {
       const t = now();
-      await db.send(
-        new PutCommand({
-          TableName: T,
-          Item: { ...a, launchedAt: t, expiresAt: t + opts.ttlSeconds } satisfies AttestationRecord,
-        }),
-      );
+      try {
+        await db.send(
+          new PutCommand({
+            TableName: T,
+            Item: { ...a, launchedAt: t, expiresAt: t + opts.ttlSeconds } satisfies AttestationRecord,
+            ConditionExpression: 'attribute_not_exists(microvmId)',
+          }),
+        );
+      } catch (e) {
+        if ((e as { name?: string }).name !== 'ConditionalCheckFailedException') throw e;
+        // Already attested. Expected on redelivery of the same job; anything else means
+        // one microvmId is serving two runners, which would break the per-job claim.
+        console.warn(
+          `[attestations] already attested microvm=${a.microvmId} (job=${a.jobId} runner=${a.runnerName})`,
+        );
+      }
     },
 
     /**
@@ -79,13 +96,17 @@ export function createAttestationsRepo(opts: AttestationsRepoOptions): Attestati
             TableName: T,
             Key: { microvmId },
             UpdateExpression: 'SET terminatedAt = :t',
-            ConditionExpression: 'attribute_exists(microvmId)',
+            // Must already be attested, and the first stamp is authoritative — a later
+            // reconciler sweep must not overwrite the real termination time.
+            ConditionExpression: 'attribute_exists(microvmId) AND attribute_not_exists(terminatedAt)',
             ExpressionAttributeValues: { ':t': now() },
           }),
         );
       } catch (e) {
-        if ((e as { name?: string }).name === 'ConditionalCheckFailedException') return;
-        throw e;
+        if ((e as { name?: string }).name !== 'ConditionalCheckFailedException') throw e;
+        // Either never attested (provision died before record) or already stamped. Both
+        // are legitimate, but log it: this is the only signal that evidence is missing.
+        console.warn(`[attestations] no open attestation to close for microvm=${microvmId}`);
       }
     },
 

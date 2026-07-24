@@ -48,7 +48,12 @@ export function loadConfig(): Config {
     imageName: req('IMAGE_NAME'),
     jobsTable: req('JOBS_TABLE'),
     jobsStateIndex: process.env.JOBS_STATE_INDEX ?? 'state-index',
-    attestationsTable: req('ATTESTATIONS_TABLE'),
+    // NOT req(): this lands in commonEnv, so req() would make it mandatory for the webhook
+    // Lambda, which never reads it. A code-only deploy (--hotswap, update-function-code, a
+    // template rollback) that missed the var would then 5xx every GitHub delivery and stop
+    // all ingress, over a value that handler doesn't use. The repos that need it fail at
+    // construction instead, where the error names the real cause.
+    attestationsTable: process.env.ATTESTATIONS_TABLE ?? '',
     queueUrl: req('QUEUE_URL'),
     labels: csv('LABELS'),
     webhookSecretParam: req('WEBHOOK_SECRET_PARAM'),

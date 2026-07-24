@@ -145,15 +145,23 @@ async function provision(msg: Extract<ControlMessage, { type: 'provision' }>, de
     const auth = await deps.microvm.authToken(microvmId);
     const runnerName = `mayfly-${msg.jobId}`;
     const jit = await deps.github.generateJitConfig(token, msg.owner, msg.repo, runnerName, msg.labels);
+    // Attest BEFORE postJit, not after. postJit returns 202 and the launcher immediately
+    // execs run.sh, so the runner is registering with GitHub the moment it returns — a
+    // failed write after that point would terminate a VM with a live job in it, and the
+    // retry could not recover (the JIT runner name is still registered, so regenerating
+    // it fails and the message walks to the DLQ). Attesting first is also strictly
+    // better evidence: the job cannot have emitted anything yet.
+    await deps.attestations.record({ microvmId, jobId: msg.jobId, runnerName, trust });
     await deps.microvm.postJit(endpoint, auth, jit, microvmId);
-    // Attest the pairing BEFORE the job can emit anything. A receipt naming this
-    // microvmId is then checkable against a record that predates the job's output.
-    await deps.attestations.record({ microvmId, jobId: msg.jobId, runnerName, endpoint, trust });
     await deps.jobs.markRunning(msg.jobId, runnerName, trust);
     console.log(`[control] running job=${msg.jobId} microvm=${microvmId} runner=${runnerName}`);
   } catch (e) {
     console.error(`[control] provision failed job=${msg.jobId} microvm=${microvmId} — terminating:`, e);
     await deps.microvm.terminate(microvmId);
+    // Close the attestation if we got as far as writing one; a VM we killed must not
+    // leave evidence that reads as still-running. Best-effort: the terminate above is
+    // what actually matters, and the original error must be the one that surfaces.
+    await deps.attestations.markTerminated(microvmId).catch(() => {});
     throw e; // surface to SQS: retry, then DLQ
   }
 }
