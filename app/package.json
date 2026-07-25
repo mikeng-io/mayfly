@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit",
     "sdk-probe": "tsx scripts/sdk-probe.ts",
     "setup-app": "tsx scripts/setup-app.ts",
-    "build-image": "tsx scripts/build-image.ts"
+    "build-image": "tsx --env-file=../.env scripts/build-image.ts"
   },
   "dependencies": {
     "@aws-sdk/client-cloudwatch": "^3.700.0",

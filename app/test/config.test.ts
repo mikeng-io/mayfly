@@ -52,6 +52,15 @@ test('loadConfig throws naming the missing required var', () => {
   expect(() => loadConfig()).toThrow(/QUEUE_URL/);
 });
 
+test('ATTESTATIONS_TABLE is NOT required — it rides in commonEnv but the webhook never reads it', () => {
+  // Making it req() would let a code-only deploy that missed the var 5xx every GitHub
+  // delivery and stop all ingress, over a value that handler does not use. Without this
+  // test the whole suite passes with req() reinstated, because the other fixtures set it.
+  delete process.env.ATTESTATIONS_TABLE;
+  expect(() => loadConfig()).not.toThrow();
+  expect(loadConfig().attestationsTable).toBe('');
+});
+
 test('getSecret reads a decrypted SSM parameter', async () => {
   const ssm = mockClient(SSMClient);
   ssm.on(GetParameterCommand).resolves({ Parameter: { Value: 'sup3rsecret' } });

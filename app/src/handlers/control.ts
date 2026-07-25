@@ -158,10 +158,14 @@ async function provision(msg: Extract<ControlMessage, { type: 'provision' }>, de
   } catch (e) {
     console.error(`[control] provision failed job=${msg.jobId} microvm=${microvmId} — terminating:`, e);
     await deps.microvm.terminate(microvmId);
-    // Close the attestation if we got as far as writing one; a VM we killed must not
-    // leave evidence that reads as still-running. Best-effort: the terminate above is
-    // what actually matters, and the original error must be the one that surfaces.
-    await deps.attestations.markTerminated(microvmId).catch(() => {});
+    // Close the attestation if we got as far as writing one; a VM we killed must not leave
+    // evidence that reads as still-running. Best-effort — the original error must be the one
+    // that surfaces — but log rather than discard: markTerminated already swallows the
+    // expected "nothing to close" case, so anything reaching here is a real fault, and a
+    // bare catch would drop the only signal that evidence is going missing.
+    await deps.attestations
+      .markTerminated(microvmId)
+      .catch((err) => console.error(`[control] attestation close failed microvm=${microvmId}:`, err));
     throw e; // surface to SQS: retry, then DLQ
   }
 }
