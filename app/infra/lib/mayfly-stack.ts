@@ -55,6 +55,8 @@ const DEPS_LOCK = path.join(APP_ROOT, 'package-lock.json');
 export const METRIC_NAMESPACE = 'Mayfly';
 export const RECLAIMED_METRIC = 'ReclaimedMicrovms';
 export const JOBS_STATE_INDEX = 'state-index';
+/** Where the attestation table's name is published for independent verifiers to discover. */
+export const ATTESTATIONS_TABLE_PARAM = '/mayfly/attestationsTable';
 
 /**
  * Mayfly control-plane stack (v1, single region — Tokyo).
@@ -114,6 +116,16 @@ export class MayflyStack extends Stack {
       pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
       timeToLiveAttribute: 'expiresAt',
       removalPolicy: RemovalPolicy.RETAIN,
+    });
+
+    // Publish the table name so an independent verifier (e.g. the public demo API) can find
+    // and read the evidence. Deliberately SSM rather than a CloudFormation export: an export
+    // that another stack imports cannot be changed or deleted while the import exists, and
+    // this table already outlives the stack. Readers need discovery, not coupling.
+    new ssm.StringParameter(this, 'AttestationsTableParam', {
+      parameterName: ATTESTATIONS_TABLE_PARAM,
+      stringValue: this.attestationsTable.tableName,
+      description: 'Name of the MicroVM identity attestation table (read-only for verifiers).',
     });
 
     // --- Queue: webhook -> control, with a short delay + DLQ ---
