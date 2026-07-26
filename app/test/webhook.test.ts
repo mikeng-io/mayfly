@@ -14,6 +14,7 @@ beforeEach(() => {
     MAYFLY_REGION: 'ap-northeast-1',
     IMAGE_NAME: 'mayfly-runner',
     JOBS_TABLE: 'MayflyJobs',
+    ATTESTATIONS_TABLE: 'MayflyAttestations',
     QUEUE_URL: 'https://sqs.ap-northeast-1.amazonaws.com/1/mayfly',
     LABELS: 'self-hosted,mayfly',
     ALLOWED_OWNERS: 'mikeng-io',

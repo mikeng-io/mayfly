@@ -1,6 +1,7 @@
 import { test, expect, vi } from 'vitest';
 import { processMessage, type ControlDeps, type GithubApi } from '../src/handlers/control';
 import type { JobsRepo } from '../src/lib/jobs';
+import type { AttestationsRepo } from '../src/lib/attestations';
 import type { MicrovmClient } from '../src/lib/microvm';
 import type { ControlMessage } from '../src/lib/types';
 
@@ -16,6 +17,15 @@ function jobs(over: Partial<JobsRepo> = {}): JobsRepo {
     setFirstSeenOverdue: vi.fn().mockResolvedValue(0),
     ...over,
   } as unknown as JobsRepo;
+}
+
+function attestations(over: Partial<AttestationsRepo> = {}): AttestationsRepo {
+  return {
+    record: vi.fn().mockResolvedValue(undefined),
+    markTerminated: vi.fn().mockResolvedValue(undefined),
+    get: vi.fn().mockResolvedValue(undefined),
+    ...over,
+  } as unknown as AttestationsRepo;
 }
 
 function microvm(over: Partial<MicrovmClient> = {}): MicrovmClient {
@@ -45,6 +55,7 @@ function github(over: Partial<GithubApi> = {}): GithubApi {
 function deps(over: Partial<ControlDeps> = {}): ControlDeps {
   return {
     jobs: jobs(),
+    attestations: attestations(),
     microvm: microvm(),
     github: github(),
     loadAppCreds: vi.fn().mockResolvedValue({ appId: '1', privateKey: 'pem' }),
@@ -180,4 +191,73 @@ test('teardown terminates the recorded VM and deletes the record', async () => {
   );
   expect(d.microvm.terminate).toHaveBeenCalledWith('mvm-9');
   expect(d.jobs.deleteJob).toHaveBeenCalledWith('987');
+});
+
+// --- VM identity ---------------------------------------------------------------
+// Every MicroVM is restored from one build snapshot, so boot_id / machine-id /
+// hostname are identical across all of them (verified live: two distinct runners
+// reported the same boot_id). The control plane is the only party that can say
+// which VM this is, so these two behaviours are what the freshness claim rests on.
+
+test('postJit hands the VM its own microvmId', async () => {
+  const d = deps();
+  await processMessage(provisionMsg, d);
+  expect(d.microvm.postJit).toHaveBeenCalledWith('ep', expect.anything(), 'JIT', 'mvm-1');
+});
+
+test('the (microvmId -> runnerName) pairing is attested before the job can emit output', async () => {
+  const d = deps();
+  await processMessage(provisionMsg, d);
+  expect(d.attestations.record).toHaveBeenCalledWith({
+    microvmId: 'mvm-1',
+    jobId: '987',
+    runnerName: 'mayfly-987',
+    trust: 'internal',
+  });
+  // Ordering is the whole point. postJit returns 202 and the launcher immediately execs
+  // the runner, so anything after it races a live job. Attest strictly before postJit.
+  const order = (f: unknown) => (f as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0];
+  expect(order(d.attestations.record)).toBeLessThan(order(d.microvm.postJit));
+});
+
+test('an attestation write failure aborts BEFORE the runner is handed its JIT config', async () => {
+  // The dangerous ordering: if this write happened after postJit, a transient DynamoDB
+  // error would terminate a VM whose runner had already registered with GitHub, and the
+  // retry could not recover because the JIT runner name is still taken.
+  const d = deps({
+    attestations: attestations({ record: vi.fn().mockRejectedValue(new Error('throttled')) }),
+  });
+  await expect(processMessage(provisionMsg, d)).rejects.toThrow('throttled');
+  expect(d.microvm.postJit).not.toHaveBeenCalled();
+  expect(d.microvm.terminate).toHaveBeenCalledWith('mvm-1');
+});
+
+test('teardown stamps the attestation instead of destroying it', async () => {
+  const d = deps({ jobs: jobs({ getJob: vi.fn().mockResolvedValue({ jobId: '987', microvmId: 'mvm-9' }) }) });
+  await processMessage(
+    { type: 'teardown', jobId: '987', installationId: 123, owner: 'mikeng-io', repo: 'mayfly-test' },
+    d,
+  );
+  expect(d.attestations.markTerminated).toHaveBeenCalledWith('mvm-9');
+  // The job record is operational state and is still deleted; the evidence is not.
+  expect(d.jobs.deleteJob).toHaveBeenCalledWith('987');
+});
+
+test('a failure AFTER attesting closes the attestation, so a killed VM leaves no open record', async () => {
+  // Fails at markRunning — i.e. after record() has already succeeded. The earlier version
+  // of this test injected at postJit, before record() was reachable, so its assertion that
+  // record was not called held trivially and proved nothing about this path.
+  const d = deps({ jobs: jobs({ markRunning: vi.fn().mockRejectedValue(new Error('boom')) }) });
+  await expect(processMessage(provisionMsg, d)).rejects.toThrow('boom');
+  expect(d.attestations.record).toHaveBeenCalled();
+  expect(d.microvm.terminate).toHaveBeenCalledWith('mvm-1');
+  expect(d.attestations.markTerminated).toHaveBeenCalledWith('mvm-1');
+});
+
+test('a failed close never masks the original provision error', async () => {
+  const d = deps({
+    jobs: jobs({ markRunning: vi.fn().mockRejectedValue(new Error('original')) }),
+    attestations: attestations({ markTerminated: vi.fn().mockRejectedValue(new Error('secondary')) }),
+  });
+  await expect(processMessage(provisionMsg, d)).rejects.toThrow('original');
 });

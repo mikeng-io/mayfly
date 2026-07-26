@@ -2,6 +2,7 @@ import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
 import { CloudWatchClient, PutMetricDataCommand } from '@aws-sdk/client-cloudwatch';
 import { loadConfig, getSecret, getSecretsManagerValue } from '../lib/config';
 import { createJobsRepo, type JobsRepo } from '../lib/jobs';
+import { createAttestationsRepo, type AttestationsRepo } from '../lib/attestations';
 import { createMicrovmClient, type MicrovmClient } from '../lib/microvm';
 import {
   appJwt,
@@ -16,6 +17,13 @@ import type { ControlMessage } from '../lib/types';
 /** How long a completed/abandoned record lingers (DynamoDB TTL) — well past max runtime. */
 const RECORD_TTL_SECONDS = 24 * 60 * 60;
 
+/**
+ * How long VM-identity evidence is kept. Long enough that a claim made in a write-up
+ * can still be checked against it — the jobs table's 24h would have expired before
+ * anyone went looking.
+ */
+const ATTESTATION_TTL_SECONDS = 30 * 24 * 60 * 60;
+
 /** Delay before a quota-deferred provision is retried. */
 const REQUEUE_DELAY_SECONDS = 60;
 
@@ -29,6 +37,8 @@ export interface GithubApi {
 
 export interface ControlDeps {
   jobs: JobsRepo;
+  /** Durable (microvmId -> runnerName) evidence; outlives the job record. */
+  attestations: AttestationsRepo;
   microvm: MicrovmClient;
   github: GithubApi;
   loadAppCreds: () => Promise<{ appId: string; privateKey: string }>;
@@ -135,19 +145,39 @@ async function provision(msg: Extract<ControlMessage, { type: 'provision' }>, de
     const auth = await deps.microvm.authToken(microvmId);
     const runnerName = `mayfly-${msg.jobId}`;
     const jit = await deps.github.generateJitConfig(token, msg.owner, msg.repo, runnerName, msg.labels);
-    await deps.microvm.postJit(endpoint, auth, jit);
+    // Attest BEFORE postJit, not after. postJit returns 202 and the launcher immediately
+    // execs run.sh, so the runner is registering with GitHub the moment it returns — a
+    // failed write after that point would terminate a VM with a live job in it, and the
+    // retry could not recover (the JIT runner name is still registered, so regenerating
+    // it fails and the message walks to the DLQ). Attesting first is also strictly
+    // better evidence: the job cannot have emitted anything yet.
+    await deps.attestations.record({ microvmId, jobId: msg.jobId, runnerName, trust });
+    await deps.microvm.postJit(endpoint, auth, jit, microvmId);
     await deps.jobs.markRunning(msg.jobId, runnerName, trust);
     console.log(`[control] running job=${msg.jobId} microvm=${microvmId} runner=${runnerName}`);
   } catch (e) {
     console.error(`[control] provision failed job=${msg.jobId} microvm=${microvmId} — terminating:`, e);
     await deps.microvm.terminate(microvmId);
+    // Close the attestation if we got as far as writing one; a VM we killed must not leave
+    // evidence that reads as still-running. Best-effort — the original error must be the one
+    // that surfaces — but log rather than discard: markTerminated already swallows the
+    // expected "nothing to close" case, so anything reaching here is a real fault, and a
+    // bare catch would drop the only signal that evidence is going missing.
+    await deps.attestations
+      .markTerminated(microvmId)
+      .catch((err) => console.error(`[control] attestation close failed microvm=${microvmId}:`, err));
     throw e; // surface to SQS: retry, then DLQ
   }
 }
 
 async function teardown(msg: Extract<ControlMessage, { type: 'teardown' }>, deps: ControlDeps): Promise<void> {
   const rec = await deps.jobs.getJob(msg.jobId);
-  if (rec?.microvmId) await deps.microvm.terminate(rec.microvmId);
+  if (rec?.microvmId) {
+    await deps.microvm.terminate(rec.microvmId);
+    // Stamp, don't delete. The job record goes away below because the state machine is
+    // done with it; the evidence that this VM served this runner has to outlive it.
+    await deps.attestations.markTerminated(rec.microvmId);
+  }
   await deps.jobs.deleteJob(msg.jobId);
   console.log(`[control] teardown job=${msg.jobId} microvm=${rec?.microvmId ?? 'none'}`);
 }
@@ -168,6 +198,11 @@ function buildDeps(): ControlDeps {
       stateIndex: cfg.jobsStateIndex,
       provisionTtlSeconds: cfg.provisionTtlSeconds,
       recordTtlSeconds: RECORD_TTL_SECONDS,
+      region: cfg.region,
+    }),
+    attestations: createAttestationsRepo({
+      table: cfg.attestationsTable,
+      ttlSeconds: ATTESTATION_TTL_SECONDS,
       region: cfg.region,
     }),
     microvm: createMicrovmClient({ region: cfg.region, maxRuntimeSeconds: cfg.maxRuntimeSeconds }),

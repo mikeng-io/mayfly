@@ -55,6 +55,8 @@ const DEPS_LOCK = path.join(APP_ROOT, 'package-lock.json');
 export const METRIC_NAMESPACE = 'Mayfly';
 export const RECLAIMED_METRIC = 'ReclaimedMicrovms';
 export const JOBS_STATE_INDEX = 'state-index';
+/** Where the attestation table's name is published for independent verifiers to discover. */
+export const ATTESTATIONS_TABLE_PARAM = '/mayfly/attestationsTable';
 
 /**
  * Mayfly control-plane stack (v1, single region — Tokyo).
@@ -63,6 +65,7 @@ export const JOBS_STATE_INDEX = 'state-index';
  */
 export class MayflyStack extends Stack {
   readonly jobsTable: dynamodb.Table;
+  readonly attestationsTable: dynamodb.Table;
   readonly queue: sqs.Queue;
   readonly deadLetterQueue: sqs.Queue;
   readonly webhookSecretParam: ssm.StringParameter;
@@ -100,6 +103,29 @@ export class MayflyStack extends Stack {
       indexName: JOBS_STATE_INDEX,
       partitionKey: { name: 'state', type: dynamodb.AttributeType.STRING },
       projectionType: dynamodb.ProjectionType.ALL,
+    });
+
+    // --- Evidence: which MicroVM served which runner (PK microvmId) ---
+    // Separate from JobsTable because the two have opposite lifetimes: job records are
+    // deleted at teardown (the state machine is done), while this has to survive so the
+    // "one fresh VM per job" claim stays checkable after the fact. RETAIN, because
+    // evidence you can destroy by redeploying a stack is not evidence.
+    this.attestationsTable = new dynamodb.Table(this, 'AttestationsTable', {
+      partitionKey: { name: 'microvmId', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+      timeToLiveAttribute: 'expiresAt',
+      removalPolicy: RemovalPolicy.RETAIN,
+    });
+
+    // Publish the table name so an independent verifier (e.g. the public demo API) can find
+    // and read the evidence. Deliberately SSM rather than a CloudFormation export: an export
+    // that another stack imports cannot be changed or deleted while the import exists, and
+    // this table already outlives the stack. Readers need discovery, not coupling.
+    new ssm.StringParameter(this, 'AttestationsTableParam', {
+      parameterName: ATTESTATIONS_TABLE_PARAM,
+      stringValue: this.attestationsTable.tableName,
+      description: 'Name of the MicroVM identity attestation table (read-only for verifiers).',
     });
 
     // --- Queue: webhook -> control, with a short delay + DLQ ---
@@ -188,6 +214,7 @@ export class MayflyStack extends Stack {
       MAYFLY_REGION: this.region,
       IMAGE_NAME: imageName,
       JOBS_TABLE: this.jobsTable.tableName,
+      ATTESTATIONS_TABLE: this.attestationsTable.tableName,
       JOBS_STATE_INDEX: JOBS_STATE_INDEX,
       QUEUE_URL: this.queue.queueUrl,
       LABELS: labels.join(','),
@@ -248,6 +275,10 @@ export class MayflyStack extends Stack {
     this.controlFn.addEventSource(new SqsEventSource(this.queue, { batchSize: 1 }));
     this.queue.grantSendMessages(this.controlFn); // re-queue over-quota provisions
     this.jobsTable.grantReadWriteData(this.controlFn);
+    // Deliberately NOT grantReadWriteData: that includes DeleteItem/BatchWriteItem, and a
+    // table whose whole point is that evidence cannot be destroyed should not hand delete
+    // rights to the roles that write it. Control writes and closes; nothing deletes.
+    this.attestationsTable.grant(this.controlFn, 'dynamodb:PutItem', 'dynamodb:UpdateItem');
     this.appIdParam.grantRead(this.controlFn);
     this.appPrivateKey.grantRead(this.controlFn);
     this.controlFn.addToRolePolicy(
@@ -271,6 +302,7 @@ export class MayflyStack extends Stack {
       depsLockFilePath: DEPS_LOCK,
     });
     this.jobsTable.grantReadWriteData(this.reconcilerFn);
+    this.attestationsTable.grant(this.reconcilerFn, 'dynamodb:UpdateItem'); // stamps only
     this.reconcilerFn.addToRolePolicy(
       new iam.PolicyStatement({ actions: MICROVM_ACTIONS, resources: ['*'] }),
     );

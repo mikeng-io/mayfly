@@ -7,6 +7,7 @@ const ENV: Record<string, string> = {
   MAYFLY_REGION: 'ap-northeast-1',
   IMAGE_NAME: 'mayfly-runner',
   JOBS_TABLE: 'MayflyJobs',
+  ATTESTATIONS_TABLE: 'MayflyAttestations',
   QUEUE_URL: 'https://sqs.ap-northeast-1.amazonaws.com/1/mayfly',
   LABELS: 'self-hosted, mayfly',
   ALLOWED_OWNERS: 'mikeng-io, nortrix-labs',
@@ -49,6 +50,15 @@ test('loadConfig applies governance + concurrency defaults', () => {
 test('loadConfig throws naming the missing required var', () => {
   delete process.env.QUEUE_URL;
   expect(() => loadConfig()).toThrow(/QUEUE_URL/);
+});
+
+test('ATTESTATIONS_TABLE is NOT required — it rides in commonEnv but the webhook never reads it', () => {
+  // Making it req() would let a code-only deploy that missed the var 5xx every GitHub
+  // delivery and stop all ingress, over a value that handler does not use. Without this
+  // test the whole suite passes with req() reinstated, because the other fixtures set it.
+  delete process.env.ATTESTATIONS_TABLE;
+  expect(() => loadConfig()).not.toThrow();
+  expect(loadConfig().attestationsTable).toBe('');
 });
 
 test('getSecret reads a decrypted SSM parameter', async () => {

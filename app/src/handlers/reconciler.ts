@@ -1,6 +1,7 @@
 import { CloudWatchClient, PutMetricDataCommand } from '@aws-sdk/client-cloudwatch';
 import { loadConfig } from '../lib/config';
 import { createJobsRepo, type JobsRepo } from '../lib/jobs';
+import { createAttestationsRepo, type AttestationsRepo } from '../lib/attestations';
 import { createMicrovmClient, type MicrovmClient } from '../lib/microvm';
 import type { JobState } from '../lib/types';
 
@@ -9,11 +10,15 @@ export const METRIC_NAMESPACE = 'Mayfly';
 export const RECLAIMED_METRIC = 'ReclaimedMicrovms';
 
 const RECORD_TTL_SECONDS = 24 * 60 * 60;
+/** Must match control.ts — evidence retention, not operational state. */
+const ATTESTATION_TTL_SECONDS = 30 * 24 * 60 * 60;
 const ACTIVE_STATES: JobState[] = ['provisioning', 'running'];
 const TERMINAL_VM = new Set(['TERMINATED', 'TERMINATING']);
 
 export interface ReconcilerDeps {
   jobs: JobsRepo;
+  /** Optional: stamp terminatedAt so reaped VMs don't leave evidence that never closes. */
+  attestations?: AttestationsRepo;
   microvm: MicrovmClient;
   maxRuntimeSeconds: number;
   /** Grace window: a record must be seen overdue across this span before we reap it. */
@@ -47,7 +52,10 @@ export async function reconcile(deps: ReconcilerDeps): Promise<{ reclaimed: numb
 
       if (vmGone) {
         // Cleanup only — the VM is already gone, so this is not a leak reclaim.
-        if (rec.microvmId) await deps.microvm.terminate(rec.microvmId);
+        if (rec.microvmId) {
+          await deps.microvm.terminate(rec.microvmId);
+          await deps.attestations?.markTerminated(rec.microvmId);
+        }
         await deps.jobs.deleteJob(rec.jobId);
         continue;
       }
@@ -59,6 +67,7 @@ export async function reconcile(deps: ReconcilerDeps): Promise<{ reclaimed: numb
       if (now - firstSeen < deps.graceSeconds) continue; // wait one more sweep
 
       await deps.microvm.terminate(rec.microvmId!);
+      await deps.attestations?.markTerminated(rec.microvmId!);
       await deps.jobs.deleteJob(rec.jobId);
       reclaimed += 1; // a real leak: the control path missed a teardown
     }
@@ -90,6 +99,11 @@ export async function handler(): Promise<{ reclaimed: number }> {
       stateIndex: cfg.jobsStateIndex,
       provisionTtlSeconds: cfg.provisionTtlSeconds,
       recordTtlSeconds: RECORD_TTL_SECONDS,
+      region: cfg.region,
+    }),
+    attestations: createAttestationsRepo({
+      table: cfg.attestationsTable,
+      ttlSeconds: ATTESTATION_TTL_SECONDS,
       region: cfg.region,
     }),
     microvm: createMicrovmClient({ region: cfg.region, maxRuntimeSeconds: cfg.maxRuntimeSeconds }),
