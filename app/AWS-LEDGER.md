@@ -13,7 +13,8 @@ installed on `mikeng-io/mayfly-demo`; a real job ran end-to-end (see the VERIFIE
 | # | When | Resource | Created by | Cost | How to destroy |
 |---|------|----------|-----------|------|----------------|
 | 1 | 2026-07-11 | **MayflyStack** (DynamoDB+GSI, SQS+DLQ, 3 Lambdas, Function URL, SNS+3 alarms, S3 ArtifactBucket, MicrovmBuildRole, EventBridge rule) | `cd app/infra && npm run deploy` | ~$0 idle + ~$0.40/mo secret | `cd app/infra && npm run destroy` + force-delete secret |
-| 2 | 2026-07-11 | MicroVM **image** `mayfly-runner` (`arn:aws:lambda:ap-northeast-1:<ACCOUNT_ID>:microvm-image:mayfly-runner`, version 1.0, state CREATED) | `app/build-image.sh` | snapshot storage (~$0.08/GB-mo) | `aws lambda-microvms delete-microvm-image --image-identifier <ARN> --region ap-northeast-1` |
+| 2 | 2026-07-11 (v3.0: 2026-07-26) | MicroVM **image** `mayfly-runner` (`arn:aws:lambda:ap-northeast-1:<ACCOUNT_ID>:microvm-image:mayfly-runner`, **version 3.0**, state UPDATED) — v2.0 added `MAYFLY_MICROVM_ID` injection; v3.0 is the same code rebuilt by the corrected builder. Old versions keep billing snapshot storage until deleted (`delete-microvm-image-version`). | `cd app && npm run build-image` | snapshot storage (~$0.08/GB-mo **per version**) | `aws lambda-microvms delete-microvm-image --image-identifier <ARN> --region ap-northeast-1` |
+| 4 | 2026-07-25 | ⚠️ DynamoDB **`AttestationsTable`** in MayflyStack — `removalPolicy: RETAIN` + PITR. **Deliberately survives `npm run destroy`** (evidence you can delete by redeploying is not evidence), so it must be deleted by hand or it bills forever. 30-day item TTL. | `cd app/infra && npm run deploy` | ~$0 idle (PAY_PER_REQUEST) + PITR ~$0.20/GB-mo | `aws dynamodb delete-table --table-name <name> --region ap-northeast-1` (find via `list-tables | grep Attestations`) |
 | 3 | 2026-07-11 | **MayflyDemoStack** (DynamoDB, API Lambda + Function URL, 2 SSM params) | `mayfly-demo/api/infra npm run deploy` | ~$0 idle | `cd mayfly-demo/api/infra && npm run destroy` |
 | ★ | (pre-existing) | `CDKToolkit` stack in ap-northeast-1 | spike `cdk bootstrap` | ~$0 | left intentionally (standard CDK) |
 
@@ -35,7 +36,8 @@ live at https://mikeng-io.github.io/mayfly-demo/ (feed shows real receipts). **A
 
 ## Inside MayflyStack (what `npm run destroy` removes)
 
-DynamoDB `JobsTable` (+`state-index` GSI, PITR, TTL) · SQS `JobsQueue` + `JobsDLQ` · SSM
+DynamoDB `JobsTable` (+`state-index` GSI, PITR, TTL) · **`AttestationsTable` is in the stack but
+`RETAIN` — `destroy` does NOT remove it, see row 4** · SQS `JobsQueue` + `JobsDLQ` · SSM
 `/mayfly/{webhookSecret,appId,installationId}` · Secrets Manager `/mayfly/appPrivateKey` (~$0.40/mo) · SNS
 `AlarmTopic` + **3 CloudWatch alarms (DLQ, reclaim, quota-drop)** · 3 ARM64 Lambdas (webhook+Function URL,
 control, reconciler) · EventBridge 2-min rule · S3 `ArtifactBucket` · `MicrovmBuildRole`. The MicroVM
@@ -45,6 +47,9 @@ control, reconciler) · EventBridge 2-min rule · S3 `ArtifactBucket` · `Microv
 - [ ] terminate any live MicroVMs (`reconcile` / `terminate-microvm`)
 - [ ] delete the runner MicroVM image
 - [ ] `cd app/infra && npm run destroy`
+- [ ] **delete `AttestationsTable` by hand** — it is `RETAIN`, so `destroy` leaves it behind
+      billing, and a later redeploy of the stack fails with "table already exists":
+      `aws dynamodb delete-table --table-name <AttestationsTable> --region ap-northeast-1`
 - [ ] **force-delete the secret** (else it lingers billable up to 30d + blocks re-deploy):
       `aws secretsmanager delete-secret --secret-id /mayfly/appPrivateKey --force-delete-without-recovery --region ap-northeast-1`
 - [ ] confirm no MicroVMs remain: `aws lambda-microvms list-microvms --region ap-northeast-1`
