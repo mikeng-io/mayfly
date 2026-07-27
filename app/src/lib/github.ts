@@ -79,6 +79,74 @@ export async function generateJitConfig(
   return body.encoded_jit_config;
 }
 
+/** App installations, so the orphan sweep can match a repo owner to a token source. */
+export async function listInstallations(jwt: string): Promise<{ id: number; login: string }[]> {
+  const res = await fetch(`${GH}/app/installations?per_page=100`, { headers: ghHeaders(jwt) });
+  if (!res.ok) throw new Error(`listInstallations failed: ${res.status}`);
+  const body = (await res.json()) as { id: number; account?: { login?: string } }[];
+  return body.map((i) => ({ id: i.id, login: i.account?.login ?? '' }));
+}
+
+/** A queued (unserved) job, for the orphan sweep. */
+export interface QueuedJob {
+  jobId: string;
+  runId: number;
+  labels: string[];
+  /** Job creation time, epoch seconds. */
+  queuedAt: number;
+}
+
+async function runsByStatus(
+  token: string,
+  owner: string,
+  repo: string,
+  status: 'queued' | 'in_progress',
+): Promise<{ id: number }[]> {
+  const res = await fetch(
+    `${GH}/repos/${owner}/${repo}/actions/runs?status=${status}&per_page=50`,
+    { headers: ghHeaders(token) },
+  );
+  if (!res.ok) throw new Error(`listRuns(${status}) failed: ${res.status}`);
+  const body = (await res.json()) as { workflow_runs: { id: number }[] };
+  return body.workflow_runs;
+}
+
+/**
+ * Every queued job across the repo's queued AND in_progress runs (a matrix run can be
+ * in_progress overall while one of its jobs still waits). This is the authoritative
+ * "unserved work" view GitHub holds — the orphan sweep's ground truth.
+ */
+export async function listQueuedJobs(
+  token: string,
+  owner: string,
+  repo: string,
+): Promise<QueuedJob[]> {
+  const runs = [
+    ...(await runsByStatus(token, owner, repo, 'queued')),
+    ...(await runsByStatus(token, owner, repo, 'in_progress')),
+  ];
+  const queued: QueuedJob[] = [];
+  for (const run of runs) {
+    const res = await fetch(`${GH}/repos/${owner}/${repo}/actions/runs/${run.id}/jobs?per_page=100`, {
+      headers: ghHeaders(token),
+    });
+    if (!res.ok) throw new Error(`listJobs(${run.id}) failed: ${res.status}`);
+    const body = (await res.json()) as {
+      jobs: { id: number; run_id: number; status: string; labels: string[]; created_at: string }[];
+    };
+    for (const job of body.jobs) {
+      if (job.status !== 'queued') continue;
+      queued.push({
+        jobId: String(job.id),
+        runId: job.run_id,
+        labels: job.labels,
+        queuedAt: Math.floor(Date.parse(job.created_at) / 1000),
+      });
+    }
+  }
+  return queued;
+}
+
 /** Fetch a workflow run for the queued re-check + fork detection. */
 export async function getRun(
   token: string,

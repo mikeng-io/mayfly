@@ -54,6 +54,7 @@ const DEPS_LOCK = path.join(APP_ROOT, 'package-lock.json');
 /** Custom-metric namespace emitted by the reconciler (Task 11). */
 export const METRIC_NAMESPACE = 'Mayfly';
 export const RECLAIMED_METRIC = 'ReclaimedMicrovms';
+export const ORPHANS_METRIC = 'OrphanedJobsReprovisioned';
 export const JOBS_STATE_INDEX = 'state-index';
 /** Where the attestation table's name is published for independent verifiers to discover. */
 export const ATTESTATIONS_TABLE_PARAM = '/mayfly/attestationsTable';
@@ -209,6 +210,24 @@ export class MayflyStack extends Stack {
     });
     quotaDropAlarm.addAlarmAction(new cwActions.SnsAction(this.alarmTopic));
 
+    // Fires when the reconciler had to re-provision a job GitHub still held queued —
+    // a stolen VM (label-pool cross-assignment) was repaired. Informational but never
+    // silent: repeated firings mean the fleet is running hot enough to cross-assign often.
+    const orphanAlarm = new cw.Metric({
+      namespace: METRIC_NAMESPACE,
+      metricName: ORPHANS_METRIC,
+      statistic: 'Sum',
+      period: Duration.minutes(5),
+    }).createAlarm(this, 'OrphanReprovisionAlarm', {
+      threshold: 1,
+      evaluationPeriods: 1,
+      comparisonOperator: cw.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      treatMissingData: cw.TreatMissingData.NOT_BREACHING,
+      alarmDescription:
+        'The reconciler re-provisioned an orphaned queued job (its webhook-minted VM was assigned to a different job).',
+    });
+    orphanAlarm.addAlarmAction(new cwActions.SnsAction(this.alarmTopic));
+
     // --- Shared Lambda config ---
     const commonEnv: Record<string, string> = {
       MAYFLY_REGION: this.region,
@@ -303,6 +322,11 @@ export class MayflyStack extends Stack {
     });
     this.jobsTable.grantReadWriteData(this.reconcilerFn);
     this.attestationsTable.grant(this.reconcilerFn, 'dynamodb:UpdateItem'); // stamps only
+    // Orphan sweep: re-enqueue provisions for queued jobs whose VM was cross-assigned,
+    // which needs the queue and the GitHub App credentials (to read GitHub's queue).
+    this.queue.grantSendMessages(this.reconcilerFn);
+    this.appIdParam.grantRead(this.reconcilerFn);
+    this.appPrivateKey.grantRead(this.reconcilerFn);
     this.reconcilerFn.addToRolePolicy(
       new iam.PolicyStatement({ actions: MICROVM_ACTIONS, resources: ['*'] }),
     );
